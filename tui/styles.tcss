@@ -1,0 +1,965 @@
+/* ==========================================================================
+   Atom One Dark Pro Theme - SES Email TUI
+   Clean, professional styling with proper rendering
+   Dynamic vertical layout that adapts to terminal size
+   ========================================================================== */
+
+/* --- Color Variables --- */
+$bg-main: #282c34;
+$bg-dark: #21252b;
+$bg-darker: #1b1f23;
+$fg-main: #abb2bf;
+$fg-dim: #5c6370;
+
+$accent-blue: #61afef;
+$accent-purple: #c678dd;
+$accent-green: #98c379;
+$accent-red: #e06c75;
+$accent-gold: #e5c07b;
+$accent-cyan: #56b6c2;
+
+$selection: #3e4451;
+$border-focus: #61afef;
+$border-dim: #3e4451;
+
+/* ==========================================================================
+   Global Reset & Typography
+   ========================================================================== */
+
+Screen {
+    background: $bg-main;
+    color: $fg-main;
+    layout: vertical;
+    overflow: auto;
+}
+
+/* Make all main containers scrollable by default */
+Container {
+    overflow-y: auto;
+}
+
+Vertical {
+    overflow-y: auto;
+}
+
+/* Scrollbar Styling */
+.scrollbar {
+    background: $bg-dark;
+    width: 1;
+}
+
+.scrollbar > .thumb {
+    background: $fg-dim;
+}
+
+/* Spacer helper classes */
+.spacer {
+    height: 1;
+    min-height: 1;
+    max-height: 1;
+}
+
+.mini-spacer {
+    height: 1;
+    min-height: 1;
+    max-height: 1;
+}
+
+/* ==========================================================================
+   Shared Components
+   ========================================================================== */
+
+/* --- Headers & Titles --- */
+
+Header {
+    dock: top;
+    height: 1;
+    background: $bg-darker;
+    color: $accent-blue;
+    text-style: bold;
+}
+
+Footer {
+    dock: bottom;
+    height: 1;
+    background: $bg-darker;
+    color: $fg-dim;
+}
+
+.screen-title {
+    text-align: center;
+    text-style: bold;
+    color: $accent-purple;
+    padding: 1 2;
+    background: $bg-dark;
+    width: 100%;
+    height: 3;
+    min-height: 3;
+    max-height: 3;
+}
+
+.section-header {
+    margin-top: 1;
+    margin-bottom: 1;
+    color: $accent-cyan;
+    text-style: bold;
+    padding-left: 1;
+    height: auto;
+}
+
+/* --- Buttons --- */
+
+Button {
+    min-width: 16;
+    height: 3;
+    background: $bg-dark;
+    color: $fg-main;
+    border: tall $border-dim;
+    text-style: bold;
+    margin: 0 1;
+}
+
+Button:hover {
+    background: $selection;
+    color: $accent-blue;
+    border: tall $accent-blue;
+}
+
+Button:focus {
+    border: tall $accent-blue;
+    background: $selection;
+}
+
+Button.-primary {
+    background: $bg-dark;
+    color: $accent-blue;
+    border: tall $accent-blue;
+}
+
+Button.-primary:hover {
+    background: $accent-blue;
+    color: $bg-darker;
+}
+
+Button.-success {
+    color: $accent-green;
+    border: tall $accent-green;
+}
+
+Button.-success:hover {
+    background: $accent-green;
+    color: $bg-darker;
+}
+
+Button.-error {
+    color: $accent-red;
+    border: tall $accent-red;
+}
+
+Button.-error:hover {
+    background: $accent-red;
+    color: $bg-darker;
+}
+
+Button.-warning {
+    color: $accent-gold;
+    border: tall $accent-gold;
+}
+
+Button.-warning:hover {
+    background: $accent-gold;
+    color: $bg-darker;
+}
+
+Button:disabled {
+    background: $bg-darker;
+    color: $fg-dim;
+    border: tall $border-dim;
+    opacity: 0.5;
+}
+
+/* --- Inputs & TextAreas --- */
+
+Input {
+    background: $bg-dark;
+    border: tall $border-dim;
+    color: $fg-main;
+    padding: 0 1;
+    height: 3;
+    margin-bottom: 1;
+}
+
+Input:focus {
+    border: tall $accent-blue;
+    background: $bg-darker;
+}
+
+Input.-valid {
+    border: tall $accent-green;
+}
+
+Input.-invalid {
+    border: tall $accent-red;
+}
+
+TextArea {
+    background: $bg-dark;
+    border: tall $border-dim;
+    color: $fg-main;
+    margin-bottom: 1;
+    min-height: 4;
+    height: auto;
+    max-height: 50%;
+}
+
+TextArea:focus {
+    border: tall $accent-blue;
+    background: $bg-darker;
+}
+
+/* --- Labels & Static Text --- */
+
+Label {
+    color: $fg-dim;
+    margin-bottom: 0;
+    margin-top: 1;
+    padding-left: 1;
+    height: auto;
+}
+
+#help-hint {
+    color: $fg-dim;
+    text-align: center;
+    padding: 1;
+    height: auto;
+}
+
+/* --- Tabs --- */
+
+TabbedContent {
+    background: $bg-main;
+    height: 1fr;
+    min-height: 10;
+}
+
+Tabs {
+    dock: top;
+    background: $bg-dark;
+    height: 3;
+    min-height: 3;
+    max-height: 3;
+}
+
+Tab {
+    padding: 0 2;
+    color: $fg-dim;
+    background: $bg-dark;
+    border: none;
+    height: 3;
+}
+
+Tab:hover {
+    color: $fg-main;
+    background: $selection;
+}
+
+Tab.-active {
+    color: $accent-blue;
+    background: $bg-main;
+    text-style: bold;
+}
+
+TabPane {
+    padding: 1;
+    overflow-y: auto;
+}
+
+ContentSwitcher {
+    height: 1fr;
+    overflow-y: auto;
+}
+
+/* --- DataTables --- */
+
+DataTable {
+    background: $bg-dark;
+    border: tall $border-dim;
+    height: 1fr;
+    min-height: 5;
+    max-height: 100%;
+}
+
+DataTable:focus {
+    border: tall $accent-blue;
+}
+
+DataTable > .datatable--header {
+    background: $bg-darker;
+    color: $accent-cyan;
+    text-style: bold;
+}
+
+DataTable > .datatable--cursor {
+    background: $selection;
+    color: $accent-blue;
+}
+
+DataTable > .datatable--hover {
+    background: $selection;
+}
+
+/* --- OptionList & DirectoryTree --- */
+
+OptionList {
+    background: $bg-dark;
+    border: tall $border-dim;
+    min-height: 3;
+    max-height: 8;
+    height: auto;
+}
+
+OptionList:focus {
+    border: tall $accent-blue;
+}
+
+OptionList > .option-list--option-highlighted {
+    background: $selection;
+    color: $accent-blue;
+}
+
+DirectoryTree {
+    background: $bg-dark;
+    border: tall $border-dim;
+    min-height: 4;
+    max-height: 10;
+    height: auto;
+}
+
+DirectoryTree:focus {
+    border: tall $accent-blue;
+}
+
+DirectoryTree > .directory-tree--folder {
+    color: $accent-gold;
+}
+
+DirectoryTree > .directory-tree--file {
+    color: $fg-main;
+}
+
+/* --- ProgressBar --- */
+
+ProgressBar {
+    height: 1;
+    padding: 0 1;
+}
+
+ProgressBar > .bar--bar {
+    background: $bg-darker;
+    color: $accent-green;
+}
+
+ProgressBar > .bar--complete {
+    background: $accent-green;
+}
+
+/* --- Log Widget --- */
+
+Log {
+    background: $bg-dark;
+    border: tall $border-dim;
+    color: $fg-dim;
+    min-height: 4;
+    height: 1fr;
+    max-height: 100%;
+}
+
+Log:focus {
+    border: tall $accent-blue;
+}
+
+/* --- Switch --- */
+
+Switch {
+    background: $bg-dark;
+    border: tall $border-dim;
+}
+
+Switch:focus {
+    border: tall $accent-blue;
+}
+
+Switch.-on {
+    background: $accent-green 30%;
+}
+
+Switch.-on > .switch--slider {
+    background: $accent-green;
+}
+
+/* --- RadioSet & RadioButton --- */
+
+RadioSet {
+    background: $bg-dark;
+    padding: 1;
+    border: tall $border-dim;
+    margin-bottom: 1;
+    height: auto;
+}
+
+RadioSet:focus {
+    border: tall $accent-blue;
+}
+
+RadioButton {
+    color: $fg-main;
+    background: transparent;
+}
+
+RadioButton:focus {
+    text-style: bold;
+}
+
+RadioButton.-selected {
+    color: $accent-blue;
+    text-style: bold;
+}
+
+/* ==========================================================================
+   Screen Specific Layouts
+   ========================================================================== */
+
+/* --- Home Screen --- */
+
+#home-container {
+    align: center middle;
+    padding: 2;
+    height: 100%;
+    width: 100%;
+    overflow: auto;
+}
+
+#home-menu {
+    width: 70;
+    height: auto;
+    max-height: 100%;
+    background: $bg-dark;
+    border: tall $border-dim;
+    padding: 1 2;
+    overflow-y: auto;
+}
+
+#logo {
+    color: $accent-blue;
+    text-align: center;
+    margin-bottom: 1;
+    width: 100%;
+    height: auto;
+}
+
+#subtitle {
+    color: $accent-purple;
+    text-align: center;
+    margin-bottom: 1;
+    text-style: italic;
+    width: 100%;
+    height: auto;
+}
+
+#home-menu Button {
+    width: 100%;
+    margin: 1 0;
+}
+
+/* --- Config Screen --- */
+
+#config-container {
+    padding: 0 2;
+    height: 1fr;
+    overflow-y: auto;
+}
+
+#config-tabs {
+    height: 1fr;
+    min-height: 10;
+}
+
+#aws-form, #sender-form, #batch-form, #paths-form, #test-recipients-form {
+    padding: 1 2;
+    height: auto;
+    overflow-y: auto;
+}
+
+#test-recipient-input-row {
+    height: 3;
+    min-height: 3;
+    max-height: 3;
+}
+
+#test-recipient-input-row Input {
+    width: 1fr;
+    margin-bottom: 0;
+}
+
+#test-recipient-input-row Button {
+    width: auto;
+    min-width: 12;
+}
+
+#test-recipient-buttons {
+    height: auto;
+    margin-top: 1;
+}
+
+#test-recipients-count {
+    background: $bg-darker;
+    color: $accent-green;
+    padding: 1;
+    border-left: tall $accent-green;
+    margin: 1 0;
+    height: auto;
+}
+
+#test-recipients-hint {
+    margin-bottom: 1;
+    padding: 1;
+    background: $bg-darker;
+    border-left: tall $accent-cyan;
+    height: auto;
+}
+
+/* --- Compose Screen Test Recipients --- */
+
+#test-recipient-row {
+    height: 5;
+    min-height: 5;
+    max-height: 5;
+    width: 100%;
+    align: left middle;
+}
+
+#test-recipient-row Select {
+    width: 40;
+    max-width: 50;
+    height: 3;
+    margin-bottom: 0;
+}
+
+#test-recipient-row Button {
+    width: 18;
+    height: 3;
+    margin-left: 1;
+}
+
+Select {
+    height: 3;
+    min-height: 3;
+}
+
+#test-recipients-hint {
+    margin-bottom: 1;
+    height: auto;
+}
+
+#bcc-toggle {
+    height: 3;
+    align: left middle;
+}
+
+#bcc-toggle Label {
+    margin-top: 0;
+    margin-left: 1;
+}
+
+#config-buttons {
+    dock: bottom;
+    padding: 1 0;
+    background: $bg-dark;
+    border-top: solid $border-dim;
+    height: 5;
+    min-height: 5;
+    max-height: 5;
+    align: center middle;
+}
+
+/* Hints in config */
+#aws-hint, #sender-hint, #batch-hint, #paths-hint {
+    margin-top: 1;
+    padding: 1;
+    background: $bg-darker;
+    border-left: tall $accent-cyan;
+    height: auto;
+}
+
+/* --- Compose Screen --- */
+
+#compose-container {
+    padding: 0;
+    height: 1fr;
+    overflow-y: auto;
+}
+
+#compose-tabs {
+    height: 1fr;
+    min-height: 10;
+}
+
+#recipients-form, #content-form, #attachments-form, #preview-form {
+    padding: 1 2;
+    height: auto;
+    overflow-y: auto;
+}
+
+#excel-row {
+    height: 3;
+    min-height: 3;
+    max-height: 3;
+}
+
+#excel-row Input {
+    width: 1fr;
+    margin-bottom: 0;
+}
+
+#excel-row Button {
+    width: auto;
+}
+
+#column-row {
+    height: 3;
+    min-height: 3;
+    max-height: 3;
+    align: left middle;
+}
+
+#column-row Label {
+    margin-top: 0;
+    width: auto;
+}
+
+#column-row Input {
+    width: 10;
+    margin-bottom: 0;
+}
+
+#column-row Button {
+    width: auto;
+}
+
+#manual-recipients {
+    height: auto;
+    min-height: 4;
+    max-height: 8;
+}
+
+#recipients-count {
+    background: $bg-darker;
+    color: $accent-green;
+    padding: 1;
+    border-left: tall $accent-green;
+    margin: 1 0;
+    height: auto;
+}
+
+#recipients-actions {
+    height: 5;
+    min-height: 5;
+    max-height: 5;
+    align: left middle;
+    margin-top: 1;
+}
+
+#recipients-actions Button {
+    min-width: 18;
+    margin-right: 1;
+}
+
+#email-body {
+    height: auto;
+    min-height: 6;
+    max-height: 50%;
+}
+
+#attachment-input-row {
+    height: 3;
+    min-height: 3;
+    max-height: 3;
+}
+
+#attachment-input-row Input {
+    width: 1fr;
+    margin-bottom: 0;
+}
+
+#attachment-input-row Button {
+    width: auto;
+}
+
+#file-tree {
+    height: auto;
+    min-height: 4;
+    max-height: 10;
+}
+
+#attachment-buttons {
+    height: auto;
+    margin-top: 1;
+}
+
+#preview-content {
+    background: $bg-darker;
+    border: tall $border-dim;
+    padding: 1 2;
+    color: $fg-main;
+    min-height: 6;
+    height: auto;
+    max-height: 100%;
+    overflow-y: auto;
+}
+
+#compose-buttons {
+    dock: bottom;
+    padding: 1;
+    background: $bg-dark;
+    border-top: solid $border-dim;
+    height: 5;
+    min-height: 5;
+    max-height: 5;
+    align: center middle;
+}
+
+/* --- Send Screen --- */
+
+#send-container {
+    padding: 1 2;
+    height: 1fr;
+    overflow-y: auto;
+}
+
+#send-summary {
+    background: $bg-dark;
+    padding: 1 2;
+    border-left: tall $accent-purple;
+    margin-bottom: 1;
+    height: auto;
+    max-height: 30%;
+    overflow-y: auto;
+}
+
+#summary-content {
+    padding: 0;
+    height: auto;
+}
+
+#progress-section {
+    background: $bg-dark;
+    padding: 1 2;
+    border-left: tall $accent-blue;
+    margin-bottom: 1;
+    height: auto;
+}
+
+#progress-status {
+    text-align: center;
+    color: $accent-cyan;
+    text-style: bold;
+    margin: 1 0;
+    height: auto;
+}
+
+#batch-progress-row, #email-progress-row {
+    height: 1;
+    min-height: 1;
+    max-height: 1;
+    margin: 0 0 1 0;
+}
+
+#stats-row {
+    height: 3;
+    min-height: 3;
+    max-height: 3;
+    align: center middle;
+}
+
+#stats-row Static {
+    width: 1fr;
+    text-align: center;
+    padding: 1;
+}
+
+#log-section {
+    background: $bg-dark;
+    border: tall $border-dim;
+    height: 1fr;
+    min-height: 4;
+    padding: 0;
+    overflow: hidden;
+}
+
+#log-section .section-header {
+    margin: 0;
+    padding: 1;
+    background: $bg-darker;
+}
+
+#send-log {
+    height: 1fr;
+    min-height: 3;
+}
+
+#send-buttons {
+    padding: 1;
+    background: $bg-dark;
+    border-top: solid $border-dim;
+    height: 5;
+    min-height: 5;
+    max-height: 5;
+    align: center middle;
+}
+
+#post-send-buttons {
+    padding: 0 1;
+    background: $bg-dark;
+    height: 5;
+    min-height: 5;
+    max-height: 5;
+    align: center middle;
+    dock: bottom;
+}
+
+#post-send-buttons Button {
+    min-width: 20;
+}
+
+/* --- History Screen --- */
+
+#history-container {
+    padding: 0 2;
+    height: 1fr;
+    overflow-y: auto;
+}
+
+#search-row {
+    background: $bg-dark;
+    padding: 1;
+    height: 5;
+    min-height: 5;
+    max-height: 5;
+    margin-bottom: 1;
+}
+
+#search-input {
+    width: 1fr;
+    margin-bottom: 0;
+}
+
+#search-row Button {
+    width: auto;
+}
+
+/* Emails section - master view */
+#emails-section {
+    height: 40%;
+    min-height: 8;
+    max-height: 50%;
+    padding: 0;
+}
+
+#emails-table {
+    height: 1fr;
+    min-height: 5;
+}
+
+#emails-count {
+    height: 2;
+    min-height: 2;
+    max-height: 2;
+    padding: 0 1;
+    color: $fg-dim;
+}
+
+/* Detail section - detail view */
+#detail-section {
+    height: 1fr;
+    min-height: 10;
+    padding: 0;
+    border-top: solid $border-dim;
+}
+
+#detail-content-wrapper {
+    height: 1fr;
+    min-height: 6;
+    background: $bg-darker;
+    border: tall $border-dim;
+    padding: 1 2;
+    overflow-y: auto;
+}
+
+#detail-content {
+    height: auto;
+}
+
+#detail-actions {
+    height: 5;
+    min-height: 5;
+    max-height: 5;
+    padding: 1 0;
+    align: left middle;
+}
+
+#detail-actions Button {
+    min-width: 16;
+}
+
+#history-buttons {
+    dock: bottom;
+    padding: 1;
+    background: $bg-dark;
+    border-top: solid $border-dim;
+    height: 5;
+    min-height: 5;
+    max-height: 5;
+    align: right middle;
+}
+
+#history-buttons Button {
+    min-width: 14;
+}
+
+/* --- Drafts Screen --- */
+
+#drafts-container {
+    padding: 0;
+    height: 1fr;
+    overflow-y: auto;
+}
+
+#drafts-hint {
+    text-align: center;
+    color: $fg-dim;
+    padding: 0 2 1 2;
+    background: $bg-dark;
+    height: auto;
+}
+
+#drafts-content {
+    padding: 1 2;
+    height: 1fr;
+    overflow-y: auto;
+}
+
+#drafts-table {
+    height: 1fr;
+    min-height: 5;
+}
+
+#drafts-buttons {
+    dock: bottom;
+    padding: 1;
+    background: $bg-dark;
+    border-top: solid $border-dim;
+    height: 5;
+    min-height: 5;
+    max-height: 5;
+    align: center middle;
+}
