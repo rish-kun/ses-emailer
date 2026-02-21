@@ -1,5 +1,5 @@
 /**
- * Compose screen — Menu-driven composition with FilePicker to reduce clutter.
+ * Compose screen — Tabbed composition with FilePicker to reduce clutter.
  */
 
 import React, { useState, useCallback } from "react";
@@ -9,6 +9,8 @@ import * as path from "path";
 import { exec } from "child_process";
 import { Box, Text, useInput } from "ink";
 import { Alert, Spinner, Select } from "@inkjs/ui";
+// @ts-ignore - ink-tab has no type declarations
+import { Tabs, Tab } from "ink-tab";
 import { uploadExcel, createDraft } from "../api.js";
 import { FormField } from "../components/FormField.js";
 import { SectionBox } from "../components/SectionBox.js";
@@ -22,14 +24,18 @@ interface Props {
     initialData: ComposeData | null;
 }
 
-type MenuOption = "menu" | "recipients" | "content" | "attachments" | "preview" | "filepicker_excel" | "filepicker_attach";
+type TabView = "recipients" | "content" | "attachments" | "preview";
+type OverlayView = "filepicker_excel" | "filepicker_attach";
+
+const TAB_ORDER: TabView[] = ["recipients", "content", "attachments", "preview"];
 
 export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
     // Navigation
-    const [view, setView] = useState<MenuOption>("menu");
+    const [activeTab, setActiveTab] = useState<TabView>("recipients");
+    const [overlay, setOverlay] = useState<OverlayView | null>(null);
 
     // Forms state
-    const [activeField, setActiveField] = useState<string>("");
+    const [activeField, setActiveField] = useState<string>("recipient_input");
 
     // Recipients
     const [recipients, setRecipients] = useState<string[]>(initialData?.recipients || []);
@@ -99,7 +105,6 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
             });
             setMessage("Draft saved!");
             setMessageType("success");
-            setView("menu");
         } catch (err) {
             setMessage(`Save error: ${err}`);
             setMessageType("error");
@@ -146,33 +151,39 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
         goToSend({ recipients, subject, body, emailType, attachments });
     }, [recipients, subject, body, emailType, attachments, goToSend]);
 
+    // Handle tab change from ink-tab
+    const handleTabChange = useCallback((name: string) => {
+        setActiveTab(name as TabView);
+        setMessage("");
+        if (name === "recipients") setActiveField("recipient_input");
+        if (name === "content") setActiveField("subject");
+    }, []);
+
     // HOOKS MUST BE AT TOP LEVEL
     useInput((input, key) => {
+        // Overlay escape
         if (key.escape) {
-            if (view === "filepicker_excel") {
-                setView("recipients");
+            if (overlay === "filepicker_excel") {
+                setOverlay(null);
                 return;
             }
-            if (view === "filepicker_attach") {
-                setView("attachments");
+            if (overlay === "filepicker_attach") {
+                setOverlay(null);
                 return;
             }
-            if (view !== "menu") {
-                setView("menu");
-                setActiveField("");
-                return;
-            }
+            // Esc goes back to home
             setScreen("home");
             return;
         }
 
-        if (view === "menu" || view.startsWith("filepicker_")) return;
+        // Skip if overlay is active
+        if (overlay) return;
 
-        // Field cycling logic
+        // Field cycling logic within a tab
         if (key.tab) {
             let fields: string[] = [];
-            if (view === "recipients") fields = ["recipient_input", "excel_column"];
-            if (view === "content") fields = ["subject", "body_type", "body"];
+            if (activeTab === "recipients") fields = ["recipient_input", "excel_column"];
+            if (activeTab === "content") fields = ["subject", "body_type", "body"];
 
             if (fields.length > 0) {
                 const idx = fields.indexOf(activeField);
@@ -196,32 +207,7 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
         if (key.ctrl && input === "e") handleSend();
     });
 
-    const handleMenuSelect = (value: string) => {
-        if (value === "back") {
-            setScreen("home");
-            return;
-        }
-        if (value === "draft") {
-            handleSaveDraft();
-            return;
-        }
-        if (value === "send") {
-            handleSend();
-            return;
-        }
-        if (value === "browser_preview") {
-            handleBrowserPreview();
-            return;
-        }
-
-        setView(value as MenuOption);
-        setMessage("");
-
-        // Auto-focus first field based on view
-        if (value === "recipients") setActiveField("recipient_input");
-        if (value === "content") setActiveField("subject");
-    };
-
+    // ── Header ──
     const header = (
         <Box marginBottom={1} justifyContent="space-between">
             <Text bold color="magenta">✉ Compose Email</Text>
@@ -234,8 +220,8 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
         </Box>
     );
 
-    // FilePickers
-    if (view === "filepicker_excel") {
+    // ── FilePicker overlays ──
+    if (overlay === "filepicker_excel") {
         return (
             <Box flexDirection="column">
                 {header}
@@ -243,16 +229,16 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
                     title="Select Excel File"
                     onSelect={(path) => {
                         setExcelPath(path);
-                        setView("recipients");
+                        setOverlay(null);
                         handleLoadExcel(path, excelColumn);
                     }}
-                    onCancel={() => setView("recipients")}
+                    onCancel={() => setOverlay(null)}
                 />
             </Box>
         );
     }
 
-    if (view === "filepicker_attach") {
+    if (overlay === "filepicker_attach") {
         return (
             <Box flexDirection="column">
                 {header}
@@ -264,56 +250,17 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
                             setMessage(`Added ${path}`);
                             setMessageType("success");
                         }
-                        setView("attachments");
+                        setOverlay(null);
                     }}
-                    onCancel={() => setView("attachments")}
+                    onCancel={() => setOverlay(null)}
                 />
             </Box>
         );
     }
 
-    // Main Menu
-    if (view === "menu") {
-        return (
-            <Box flexDirection="column">
-                {header}
-
-                {message && <Box marginBottom={1}><Alert variant={messageType}>{message}</Alert></Box>}
-
-                <SectionBox title="Compose Menu" borderColor="blue">
-                    <Box flexDirection="column" paddingY={1} width={40}>
-                        <Select
-                            options={[
-                                { label: `Recipients (${recipients.length})`, value: "recipients" },
-                                { label: `Email Content${subject ? " ✓" : ""} [${emailType.toUpperCase()}]`, value: "content" },
-                                { label: `Attachments (${attachments.length})`, value: "attachments" },
-                                { label: "Preview Email", value: "preview" },
-                                ...(emailType === "html" ? [{ label: "🌐 Preview in Browser", value: "browser_preview" }] : []),
-                                { label: "🚀 Send Now", value: "send" },
-                                { label: "💾 Save Draft", value: "draft" },
-                                { label: "⬅️ Back to Home", value: "back" }
-                            ]}
-                            onChange={handleMenuSelect}
-                        />
-                    </Box>
-                </SectionBox>
-
-                <Box marginTop={1}>
-                    <KeyHint hints={[
-                        { key: "↑↓", label: "Select" },
-                        { key: "Enter", label: "Open" },
-                        { key: "Esc", label: "Back" },
-                    ]} />
-                </Box>
-            </Box>
-        );
-    }
-
-    // Form rendering generator
-    const renderFormFields = () => {
-        const focusNext = () => null;
-
-        if (view === "recipients") {
+    // ── Tab content renderers ──
+    const renderTabContent = () => {
+        if (activeTab === "recipients") {
             return (
                 <SectionBox title={`Recipients (${recipients.length})`} borderColor="green">
                     <Box flexDirection="column" gap={0} paddingY={1}>
@@ -336,7 +283,7 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
                             placeholder="0"
                             isActive={activeField === "excel_column"}
                             onChange={setExcelColumn}
-                            onSubmit={focusNext}
+                            onSubmit={() => null}
                         />
 
                         <Box marginTop={1}>
@@ -349,13 +296,11 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
                                     { label: "Browse for Excel File...", value: "browse" },
                                     { label: "Load currently selected", value: "load" },
                                     { label: "Clear all recipients", value: "clear" },
-                                    { label: "Back to Menu", value: "back" }
                                 ]}
                                 onChange={(val) => {
-                                    if (val === "browse") setView("filepicker_excel");
+                                    if (val === "browse") setOverlay("filepicker_excel");
                                     if (val === "load") handleLoadExcel(excelPath, excelColumn);
                                     if (val === "clear") { setRecipients([]); setMessage("Recipients cleared"); }
-                                    if (val === "back") { setView("menu"); setActiveField(""); }
                                 }}
                             />
                         </Box>
@@ -366,7 +311,7 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
             );
         }
 
-        if (view === "content") {
+        if (activeTab === "content") {
             return (
                 <SectionBox title="Email Content" borderColor="blue">
                     <Box flexDirection="column" gap={0} paddingY={1}>
@@ -376,7 +321,7 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
                             placeholder="Enter your email subject..."
                             isActive={activeField === "subject"}
                             onChange={setSubject}
-                            onSubmit={focusNext}
+                            onSubmit={() => null}
                         />
 
                         <Box marginTop={1} flexDirection="column">
@@ -425,7 +370,7 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
             );
         }
 
-        if (view === "attachments") {
+        if (activeTab === "attachments") {
             return (
                 <SectionBox title={`Attachments (${attachments.length})`} borderColor="yellow">
                     <Box flexDirection="column" gap={0} paddingY={1}>
@@ -434,11 +379,9 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
                                 options={[
                                     { label: "Add Attachment...", value: "add" },
                                     ...attachments.map((a, i) => ({ label: `❌ Remove ${a.split('/').pop()}`, value: `RM_${i}` })),
-                                    { label: "Back to Menu", value: "back" }
                                 ]}
                                 onChange={(val) => {
-                                    if (val === "add") setView("filepicker_attach");
-                                    if (val === "back") setView("menu");
+                                    if (val === "add") setOverlay("filepicker_attach");
                                     if (val.startsWith("RM_")) {
                                         const idx = parseInt(val.replace("RM_", ""));
                                         setAttachments(attachments.filter((_, i) => i !== idx));
@@ -460,7 +403,7 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
             );
         }
 
-        if (view === "preview") {
+        if (activeTab === "preview") {
             return (
                 <SectionBox title="Email Preview" borderColor="magenta">
                     <Box flexDirection="column" paddingY={1}>
@@ -479,6 +422,19 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
                             <Box><Text color={subject.trim() ? "green" : "red"}>{subject.trim() ? " ✓" : " ✗"} Subject line set</Text></Box>
                             <Box><Text color={body.trim() ? "green" : "red"}>{body.trim() ? " ✓" : " ✗"} Body content written</Text></Box>
                         </Box>
+
+                        {emailType === "html" && (
+                            <Box marginTop={1}>
+                                <Select
+                                    options={[
+                                        { label: "🌐 Preview in Browser", value: "browser_preview" },
+                                    ]}
+                                    onChange={(val) => {
+                                        if (val === "browser_preview") handleBrowserPreview();
+                                    }}
+                                />
+                            </Box>
+                        )}
                     </Box>
                 </SectionBox>
             );
@@ -493,22 +449,38 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
 
             {message && <Box marginBottom={1}><Alert variant={messageType}>{message}</Alert></Box>}
 
-            {renderFormFields()}
-
-            <Box marginTop={1}>
-                <Text dimColor>
-                    <Text color="yellow">Tab</Text> next field │ <Text color="yellow">Shift+Tab</Text> prev field
-                </Text>
+            {/* ── Tabular Navigation ── */}
+            <Box marginBottom={1}>
+                <Tabs
+                    onChange={handleTabChange}
+                    defaultValue={activeTab}
+                    keyMap={{
+                        useTab: false,
+                        useNumbers: true,
+                        previous: [],
+                        next: [],
+                    }}
+                >
+                    <Tab name="recipients">{`Recipients (${recipients.length})`}</Tab>
+                    <Tab name="content">{`Content${subject ? " ✓" : ""} [${emailType.toUpperCase()}]`}</Tab>
+                    <Tab name="attachments">{`Attachments (${attachments.length})`}</Tab>
+                    <Tab name="preview">Preview</Tab>
+                </Tabs>
             </Box>
 
+            {/* ── Active Tab Content ── */}
+            {renderTabContent()}
+
+            {/* ── Footer Hints ── */}
             <Box marginTop={1}>
                 {savingDraft ? (
                     <Spinner label="Saving draft..." />
                 ) : (
                     <KeyHint hints={[
+                        { key: "←→", label: "Switch Tab" },
                         { key: "Ctrl+E", label: "Send" },
                         { key: "Ctrl+S", label: "Save Draft" },
-                        { key: "Esc", label: "Back to Menu" },
+                        { key: "Esc", label: "Back" },
                     ]} />
                 )}
             </Box>
