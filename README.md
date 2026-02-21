@@ -1,227 +1,142 @@
-# SES Email Sender TUI
+# SES Email Sender
 
-A powerful Terminal User Interface (TUI) application for sending bulk emails via AWS SES (Simple Email Service).
+A terminal-based email sending application powered by AWS SES, with a FastAPI backend and React-based TUI (Terminal User Interface).
 
 ![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)
+![TypeScript](https://img.shields.io/badge/typescript-5.7+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
+
+## Architecture
+
+```
+┌──────────────────┐       HTTP/SSE        ┌──────────────────┐
+│  TypeScript TUI  │ ◄──────────────────── │  FastAPI Backend  │
+│  (Ink + React)   │     Bearer Token      │  (Python)         │
+└──────────────────┘                       └──────────────────┘
+        │                                           │
+        │  start.py orchestrates both               │
+        └───────────────────────────────────────────┘
+```
+
+- **Backend** (`api/`): FastAPI REST API wrapping the email sending, config management, and SQLite database operations
+- **TUI** (`ts-tui/`): React-based terminal interface using [Ink](https://github.com/vadimdemedes/ink) and [@inkjs/ui](https://github.com/vadimdemedes/ink-ui)
+- **Orchestrator** (`start.py`): Generates a one-time auth token, spawns both processes, handles cleanup
 
 ## Features
 
-- 📧 **Compose Emails** - Create HTML or plain text emails with a user-friendly interface
-- 📋 **Excel Import** - Load recipient lists from Excel files
-- 📎 **Attachments** - Add file attachments to your emails
-- 📊 **Batch Sending** - Send emails in configurable batches with rate limiting
-- 📈 **Progress Tracking** - Real-time progress bars and activity logs during sending
-- 📜 **History** - View all sent emails with search and statistics
-- ⚙️ **Configuration** - Easy AWS credentials and sender settings management
-- 🎨 **Modern UI** - Sleek interface inspired by Atom One Dark Pro with improved typography and layout
+- 📧 **Compose Emails** — HTML or plain text with rich preview
+- 📋 **Excel Import** — Load recipient lists from `.xlsx` files
+- 📊 **Batch Sending** — Configurable batch size with rate limiting and real-time SSE progress
+- 📜 **History** — Campaign list with search, stats, and detail views
+- 📝 **Drafts** — Save and load email drafts
+- ⚙️ **Multi-Profile Config** — Named configuration profiles for different AWS accounts/environments
+- 🔒 **Secure** — Auto-generated Bearer token authentication between TUI and API
 
-## Installation
+## Prerequisites
 
-### Prerequisites
-
-- Python 3.12 or higher
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/) (Python package manager)
+- [Bun](https://bun.sh/) (TypeScript runtime)
 - AWS SES account with verified sender email
-- `uv` package manager (recommended) or `pip`
 
-### Setup
+## Quick Start
 
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd ses-email
-   ```
+```bash
+# 1. Clone and install
+git clone <repository-url>
+cd ses-emailer
 
-2. Install dependencies using `uv`:
-   ```bash
-   uv sync
-   ```
+# 2. Install Python dependencies
+uv sync
 
-   Or using `pip`:
-   ```bash
-   pip install -e .
-   ```
+# 3. Install TypeScript dependencies
+cd ts-tui && bun install && cd ..
 
-3. Run the application:
-   ```bash
-   # Using uv
-   uv run ses-email
-
-   # Or directly with Python
-   python -m tui.app
-   ```
+# 4. Run the application
+uv run python start.py
+```
 
 ## Configuration
 
-### AWS Credentials
+On first launch, go to **Settings** (`S` key) to configure:
 
-Before sending emails, you need to configure your AWS SES credentials:
+1. **AWS Credentials** — Access Key, Secret Key, Region, Source Email
+2. **Sender Settings** — Display name, Reply-To, Default TO address
+3. **Batch Settings** — Batch size, delay between batches
+4. **Test Recipients** — Pre-configured test email addresses
 
-1. Launch the application
-2. Go to **Settings** (press `S` or click the Settings button)
-3. In the **AWS Credentials** tab, enter:
-   - AWS Access Key ID
-   - AWS Secret Access Key
-   - AWS Region (e.g., `us-east-1`)
-   - Source Email (must be verified in SES)
+### Multiple Profiles
 
-4. Click **Save**
+Create named profiles for different environments (production, staging, testing). Switch between profiles from the Settings screen.
 
-> ⚠️ **Security Note**: Your credentials are stored locally in `config/settings.json`. This file is excluded from git by default. Never commit your credentials to version control.
+Settings are stored in `config/settings.json` (excluded from git).
 
-### Sender Settings
-
-Configure how your emails appear to recipients:
-
-- **Sender Display Name**: The name shown in the "From" field
-- **Reply-To Email**: Where replies will be sent
-- **Default TO Address**: Usually the same as your source email (for BCC mode)
-
-### Batch Settings
-
-Control how emails are sent:
-
-- **Batch Size**: Number of emails per batch (default: 50)
-- **Delay Between Batches**: Seconds to wait between batches (default: 60)
-- **Send as BCC**: Recommended for bulk emails to protect recipient privacy
-
-## Usage
-
-### Sending Emails
-
-1. **Compose**: Press `C` or click "Compose Email"
-2. **Add Recipients**:
-   - Load from Excel file: Enter the file path and column index, then click "Load"
-   - Or enter emails manually, one per line
-3. **Write Content**:
-   - Enter the subject line
-   - Choose HTML or Plain Text format
-   - Write your email body
-4. **Add Attachments** (optional):
-   - Use the file browser or enter paths manually
-5. **Preview**: Check the Preview tab to verify your email
-6. **Send**: Click "Proceed to Send" and then "Start Sending"
-
-### Keyboard Shortcuts
+## Keyboard Shortcuts
 
 | Key | Action |
 |-----|--------|
-| `Ctrl+Q` | Quit application |
-| `Ctrl+H` | Go to Home screen |
-| `?` | Show help |
-| `Tab` / `Shift+Tab` | Navigate between elements |
-| `Enter` | Select/Activate |
-| `Escape` | Go back / Cancel |
-
-#### Screen-Specific Shortcuts
-
-**Home Screen:**
-- `C` - Compose new email
-- `S` - Open Settings
-- `H` - View History
-- `Q` - Quit
-
-**Compose Screen:**
-- `Ctrl+Enter` - Proceed to send
-- `Ctrl+S` - Save draft
-
-**History Screen:**
-- `/` - Focus search
-- `R` - Refresh data
+| `Ctrl+Q` | Quit |
+| `Ctrl+H` | Go to Home |
+| `C` | Compose Email |
+| `S` | Settings |
+| `H` | History |
+| `D` | Drafts |
+| `Esc` | Back / Cancel |
+| `↑↓` | Navigate lists |
+| `Enter` | Select / Confirm |
 
 ## Project Structure
 
 ```
-ses-email/
-├── tui/                    # TUI application
-│   ├── app.py              # Main application entry point
-│   ├── styles.tcss         # Textual CSS styles
-│   └── screens/            # Screen definitions
-│       ├── home.py         # Home/menu screen
-│       ├── config.py       # Configuration screen
-│       ├── compose.py      # Email composition screen
-│       ├── send.py         # Sending screen with progress
-│       └── history.py      # Email history screen
-├── sending/                # Email sending logic
-│   ├── db.py               # SQLite database operations
-│   ├── emails.py           # Email message classes
-│   ├── email_list.py       # Excel scraping utilities
-│   ├── senders.py          # Email sender classes
-│   └── final_mail.py       # SES sending functions
+ses-emailer/
+├── api/                    # FastAPI backend
+│   ├── main.py             # App entry + CORS + health check
+│   ├── auth.py             # Bearer token auth
+│   └── routers/            # API endpoints
+│       ├── config.py       # Config + profile management
+│       ├── email.py        # Sending + file uploads
+│       ├── history.py      # Campaign history
+│       ├── drafts.py       # Draft CRUD
+│       └── db.py           # DB management
+├── ts-tui/                 # TypeScript TUI
+│   ├── src/
+│   │   ├── index.tsx       # Entry point
+│   │   ├── App.tsx         # Router + layout
+│   │   ├── api.ts          # API client
+│   │   └── screens/        # UI screens
+│   └── package.json
+├── sending/                # Email logic (shared)
+│   ├── db.py               # SQLite ORM
+│   ├── emails.py           # MIME builder
+│   ├── senders.py          # SES sender
+│   └── email_list.py       # Excel parser
 ├── config/                 # Configuration
-│   ├── settings.py         # Configuration management
-│   └── settings.json       # User settings (not in git)
-├── files/                  # Attachments directory
-├── data/                   # Data files
-└── emails.db               # SQLite database (auto-created)
+│   └── settings.py         # Multi-profile manager
+├── start.py                # Orchestrator
+└── pyproject.toml
 ```
 
-## AWS SES Setup
+## API Endpoints
 
-1. **Create an AWS Account** if you don't have one
-2. **Navigate to SES** in the AWS Console
-3. **Verify your sender email address** or domain
-4. **Request production access** if you're in sandbox mode
-5. **Create IAM credentials** with SES send permissions:
-   ```json
-   {
-     "Version": "2012-10-17",
-     "Statement": [
-       {
-         "Effect": "Allow",
-         "Action": [
-           "ses:SendEmail",
-           "ses:SendRawEmail"
-         ],
-         "Resource": "*"
-       }
-     ]
-   }
-   ```
+All endpoints (except `/health`) require `Authorization: Bearer <token>`.
 
-## Database
-
-The application uses SQLite to store email history:
-
-- **emails** table: Stores email templates (subject, body, sender, attachments)
-- **sent_emails** table: Stores individual send records (recipient, timestamp, type)
-
-The database is automatically created at `emails.db` on first run.
-
-## Troubleshooting
-
-### "AWS credentials not configured"
-
-Go to Settings and enter your AWS credentials. Make sure the source email is verified in SES.
-
-### "Access Denied" errors
-
-Check that your IAM user has the correct SES permissions and that you're using the correct region.
-
-### Emails not being delivered
-
-1. Check if you're in SES sandbox mode (can only send to verified emails)
-2. Verify your sender email address in SES console
-3. Check the activity log for error messages
-
-### Excel file not loading
-
-1. Ensure the file exists at the specified path
-2. Check that `openpyxl` is installed (`uv add openpyxl`)
-3. Verify the column index is correct (0-based)
-
-## Dependencies
-
-- **textual** - TUI framework
-- **boto3** - AWS SDK for Python
-- **pandas** - Data manipulation (Excel reading)
-- **openpyxl** - Excel file support
-- **python-dotenv** - Environment variable management
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Health check (no auth) |
+| GET | `/api/config` | Active profile config |
+| PUT | `/api/config` | Update config |
+| GET | `/api/config/profiles` | List profiles |
+| POST | `/api/config/profiles` | Create profile |
+| DELETE | `/api/config/profiles/{name}` | Delete profile |
+| POST | `/api/config/profiles/{name}/activate` | Switch profile |
+| POST | `/api/emails/send` | Send emails (SSE stream) |
+| POST | `/api/emails/upload-excel` | Upload Excel |
+| POST | `/api/emails/compare` | Compare recipients |
+| GET | `/api/history` | List campaigns |
+| GET | `/api/history/{id}` | Campaign detail |
+| GET | `/api/history/stats` | Statistics |
+| GET/POST/PUT/DELETE | `/api/drafts[/id]` | Draft CRUD |
 
 ## License
 
-MIT License - See LICENSE file for details.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit issues and pull requests.
+MIT License
