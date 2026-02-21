@@ -38,12 +38,14 @@ export function App() {
             exit();
         }
         if (key.ctrl && input === "h") {
+            console.clear();
             setScreen("home");
         }
     });
 
     const goToSend = useCallback((data: ComposeData) => {
         setComposeData(data);
+        console.clear();
         setScreen("send");
     }, []);
 
@@ -55,6 +57,7 @@ export function App() {
             emailType: (_draft["email_type"] as "html" | "text") || "html",
             attachments: (_draft["attachments"] as string[]) || [],
         });
+        console.clear();
         setScreen("compose");
     }, []);
 

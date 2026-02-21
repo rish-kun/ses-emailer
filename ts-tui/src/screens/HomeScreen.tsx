@@ -49,10 +49,10 @@ export function HomeScreen({ setScreen }: Props) {
 
     useInput((input) => {
         const k = input.toLowerCase();
-        if (k === "c") setScreen("compose");
-        if (k === "s") setScreen("config");
-        if (k === "h") setScreen("history");
-        if (k === "d") setScreen("drafts");
+        if (k === "c") { console.clear(); setScreen("compose"); }
+        if (k === "s") { console.clear(); setScreen("config"); }
+        if (k === "h") { console.clear(); setScreen("history"); }
+        if (k === "d") { console.clear(); setScreen("drafts"); }
     });
 
     return (

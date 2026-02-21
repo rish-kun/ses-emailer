@@ -9,8 +9,6 @@ import * as path from "path";
 import { exec } from "child_process";
 import { Box, Text, useInput } from "ink";
 import { Alert, Spinner, Select } from "@inkjs/ui";
-// @ts-ignore - ink-tab has no type declarations
-import { Tabs, Tab } from "ink-tab";
 import { uploadExcel, createDraft } from "../api.js";
 import { FormField } from "../components/FormField.js";
 import { SectionBox } from "../components/SectionBox.js";
@@ -151,14 +149,6 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
         goToSend({ recipients, subject, body, emailType, attachments });
     }, [recipients, subject, body, emailType, attachments, goToSend]);
 
-    // Handle tab change from ink-tab
-    const handleTabChange = useCallback((name: string) => {
-        setActiveTab(name as TabView);
-        setMessage("");
-        if (name === "recipients") setActiveField("recipient_input");
-        if (name === "content") setActiveField("subject");
-    }, []);
-
     // HOOKS MUST BE AT TOP LEVEL
     useInput((input, key) => {
         // Overlay escape
@@ -172,6 +162,7 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
                 return;
             }
             // Esc goes back to home
+            console.clear();
             setScreen("home");
             return;
         }
@@ -179,7 +170,15 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
         // Skip if overlay is active
         if (overlay) return;
 
-        // Field cycling logic within a tab
+        // Number keys (Meta+1 to Meta+4) to switch tabs directly
+        if (key.meta) {
+            if (input === "1") setActiveTab("recipients");
+            if (input === "2") setActiveTab("content");
+            if (input === "3") setActiveTab("attachments");
+            if (input === "4") setActiveTab("preview");
+        }
+
+        // Field cycling logic within a tab (Tab key only)
         if (key.tab) {
             let fields: string[] = [];
             if (activeTab === "recipients") fields = ["recipient_input", "excel_column"];
@@ -195,11 +194,36 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
                     setActiveField(fields[next]);
                 }
             }
+            return; // prevent arrow logic if tab is somehow triggered
         }
 
-        // Body type toggle when body_type pseudo-field is focused
-        if (activeField === "body_type" && (key.leftArrow || key.rightArrow)) {
-            setEmailType((prev) => (prev === "html" ? "text" : "html"));
+        // Tab Navigation - Left / Right arrows
+        if (key.leftArrow) {
+            // body_type field intercepts arrows to toggle html/text
+            if (activeTab === "content" && activeField === "body_type") {
+                setEmailType((prev) => (prev === "html" ? "text" : "html"));
+                return;
+            }
+            const currIdx = TAB_ORDER.indexOf(activeTab);
+            const nextIdx = Math.max(0, currIdx - 1);
+            if (nextIdx !== currIdx) console.clear();
+            setActiveTab(TAB_ORDER[nextIdx]);
+            setMessage("");
+            return;
+        }
+
+        if (key.rightArrow) {
+            // body_type field intercepts arrows to toggle html/text
+            if (activeTab === "content" && activeField === "body_type") {
+                setEmailType((prev) => (prev === "html" ? "text" : "html"));
+                return;
+            }
+            const currIdx = TAB_ORDER.indexOf(activeTab);
+            const nextIdx = Math.min(TAB_ORDER.length - 1, currIdx + 1);
+            if (nextIdx !== currIdx) console.clear();
+            setActiveTab(TAB_ORDER[nextIdx]);
+            setMessage("");
+            return;
         }
 
         // Global composition shortcuts
@@ -450,22 +474,21 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
             {message && <Box marginBottom={1}><Alert variant={messageType}>{message}</Alert></Box>}
 
             {/* ── Tabular Navigation ── */}
-            <Box marginBottom={1}>
-                <Tabs
-                    onChange={handleTabChange}
-                    defaultValue={activeTab}
-                    keyMap={{
-                        useTab: false,
-                        useNumbers: true,
-                        previous: [],
-                        next: [],
-                    }}
-                >
-                    <Tab name="recipients">{`Recipients (${recipients.length})`}</Tab>
-                    <Tab name="content">{`Content${subject ? " ✓" : ""} [${emailType.toUpperCase()}]`}</Tab>
-                    <Tab name="attachments">{`Attachments (${attachments.length})`}</Tab>
-                    <Tab name="preview">Preview</Tab>
-                </Tabs>
+            <Box marginBottom={1} gap={2}>
+                {TAB_ORDER.map((tab, idx) => {
+                    const isActive = activeTab === tab;
+                    let label = "";
+                    if (tab === "recipients") label = `Recipients (${recipients.length})`;
+                    if (tab === "content") label = `Content${subject ? " ✓" : ""} [${emailType.toUpperCase()}]`;
+                    if (tab === "attachments") label = `Attachments (${attachments.length})`;
+                    if (tab === "preview") label = "Preview";
+
+                    return (
+                        <Text key={tab} color={isActive ? "cyan" : "gray"} bold={isActive}>
+                            {idx + 1}. {label}
+                        </Text>
+                    );
+                })}
             </Box>
 
             {/* ── Active Tab Content ── */}
