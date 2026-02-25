@@ -6,44 +6,11 @@ A terminal-based email sending application powered by AWS SES, with a FastAPI ba
 ![TypeScript](https://img.shields.io/badge/typescript-5.7+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-## Architecture
-
-```
-┌──────────────────┐       HTTP/SSE        ┌──────────────────┐
-│  TypeScript TUI  │ ◄──────────────────── │  FastAPI Backend  │
-│  (Ink + React)   │     Bearer Token      │  (Python)         │
-└──────────────────┘                       └──────────────────┘
-        │                                           │
-        │  start.py orchestrates both               │
-        └───────────────────────────────────────────┘
-```
-
-- **Backend** (`api/`): FastAPI REST API wrapping the email sending, config management, and SQLite database operations
-- **TUI** (`ts-tui/`): React-based terminal interface using [Ink](https://github.com/vadimdemedes/ink) and [@inkjs/ui](https://github.com/vadimdemedes/ink-ui)
-- **Orchestrator** (`start.py`): Generates a one-time auth token, spawns both processes, handles cleanup
-
-## Features
-
-- 📧 **Compose Emails** — HTML or plain text with rich preview
-- 📋 **Excel Import** — Load recipient lists from `.xlsx` files
-- 📊 **Batch Sending** — Configurable batch size with rate limiting and real-time SSE progress
-- 📜 **History** — Campaign list with search, stats, and detail views
-- 📝 **Drafts** — Save and load email drafts
-- ⚙️ **Multi-Profile Config** — Named configuration profiles for different AWS accounts/environments
-- 🔒 **Secure** — Auto-generated Bearer token authentication between TUI and API
-
-## Prerequisites
-
-- Python 3.12+
-- [uv](https://docs.astral.sh/uv/) (Python package manager)
-- [Bun](https://bun.sh/) (TypeScript runtime)
-- AWS SES account with verified sender email
-
 ## Quick Start
 
 ```bash
 # 1. Clone and install
-git clone <repository-url>
+git clone git@github.com:rish-kun/ses-emailer.git
 cd ses-emailer
 
 # 2. Install Python dependencies
@@ -84,6 +51,39 @@ Settings are stored in `config/settings.json` (excluded from git).
 | `Esc` | Back / Cancel |
 | `↑↓` | Navigate lists |
 | `Enter` | Select / Confirm |
+
+## Architecture
+
+```
+┌──────────────────┐       HTTP/SSE        ┌──────────────────┐
+│  TypeScript TUI  │ ◄──────────────────── │  FastAPI Backend  │
+│  (Ink + React)   │     Bearer Token      │  (Python)         │
+└──────────────────┘                       └──────────────────┘
+        │                                           │
+        │  start.py orchestrates both               │
+        └───────────────────────────────────────────┘
+```
+
+- **Backend** (`api/`): FastAPI REST API wrapping the email sending, config management, and SQLite database operations
+- **TUI** (`ts-tui/`): React-based terminal interface using [Ink](https://github.com/vadimdemedes/ink) and [@inkjs/ui](https://github.com/vadimdemedes/ink-ui)
+- **Orchestrator** (`start.py`): Generates a one-time auth token, spawns both processes, handles cleanup
+
+## Features
+
+- 📧 **Compose Emails** — HTML or plain text with rich preview
+- 📋 **Excel Import** — Load recipient lists from `.xlsx` files
+- 📊 **Batch Sending** — Configurable batch size with rate limiting and real-time SSE progress
+- 📜 **History** — Campaign list with search, stats, and detail views
+- 📝 **Drafts** — Save and load email drafts
+- ⚙️ **Multi-Profile Config** — Named configuration profiles for different AWS accounts/environments
+- 🔒 **Secure** — Auto-generated Bearer token authentication between TUI and API
+
+## Prerequisites
+
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/) (Python package manager)
+- [Bun](https://bun.sh/) (TypeScript runtime)
+- AWS SES account with verified sender email
 
 ## Project Structure
 
