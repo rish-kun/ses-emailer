@@ -20,7 +20,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
+      - name: change dir
+        run: cd landing
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
