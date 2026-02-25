@@ -2,14 +2,14 @@
  * Compose screen — Tabbed composition with FilePicker to reduce clutter.
  */
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import * as os from "os";
 import * as fs from "fs";
 import * as path from "path";
 import { exec } from "child_process";
 import { Box, Text, useInput } from "ink";
-import { Alert, Spinner, Select } from "@inkjs/ui";
-import { uploadExcel, createDraft } from "../api.js";
+import { Alert, Spinner, Select, MultiSelect } from "@inkjs/ui";
+import { uploadExcel, createDraft, getConfig } from "../api.js";
 import { FormField } from "../components/FormField.js";
 import { SectionBox } from "../components/SectionBox.js";
 import { KeyHint } from "../components/KeyHint.js";
@@ -50,10 +50,27 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
     // Attachments
     const [attachments, setAttachments] = useState<string[]>(initialData?.attachments || []);
 
+    // Test recipients
+    const [testRecipients, setTestRecipients] = useState<string[]>([]);
+    const [loadingTestRecipients, setLoadingTestRecipients] = useState(false);
+
     // UI
     const [message, setMessage] = useState("");
     const [messageType, setMessageType] = useState<"success" | "error">("success");
     const [savingDraft, setSavingDraft] = useState(false);
+
+    // Load test recipients from config on mount
+    useEffect(() => {
+        setLoadingTestRecipients(true);
+        getConfig()
+            .then((cfg) => {
+                const profile = cfg?.active_profile ?? "default";
+                const testR: string[] = cfg?.profiles?.[profile]?.test_recipients ?? [];
+                setTestRecipients(testR);
+            })
+            .catch(() => setTestRecipients([]))
+            .finally(() => setLoadingTestRecipients(false));
+    }, []);
 
     // Actions
     const addRecipient = useCallback(
@@ -330,6 +347,39 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
                         </Box>
 
                         {loadingExcel && <Box marginTop={1}><Spinner label="Loading Excel file..." /></Box>}
+
+                        <Box marginTop={1} marginBottom={0}>
+                            <Text bold dimColor>── Test Recipients ──</Text>
+                        </Box>
+
+                        {loadingTestRecipients ? (
+                            <Box marginTop={1}><Spinner label="Loading test recipients..." /></Box>
+                        ) : testRecipients.length === 0 ? (
+                            <Box marginTop={1}>
+                                <Text dimColor italic>No test recipients configured. Add them in Config → test_recipients.</Text>
+                            </Box>
+                        ) : (
+                            <Box marginTop={1} flexDirection="column">
+                                <Text dimColor>Space to select, Enter to add selected to recipients:</Text>
+                                <Box marginTop={1}>
+                                    <MultiSelect
+                                        options={testRecipients.map((r) => ({ label: r, value: r }))}
+                                        onSubmit={(selected) => {
+                                            if (selected.length === 0) return;
+                                            const newOnes = selected.filter((r) => !recipients.includes(r));
+                                            if (newOnes.length > 0) {
+                                                setRecipients((prev) => [...prev, ...newOnes]);
+                                                setMessage(`Added ${newOnes.length} test recipient(s)`);
+                                                setMessageType("success");
+                                            } else {
+                                                setMessage("Selected recipients already added");
+                                                setMessageType("error");
+                                            }
+                                        }}
+                                    />
+                                </Box>
+                            </Box>
+                        )}
                     </Box>
                 </SectionBox>
             );
