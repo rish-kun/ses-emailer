@@ -4,6 +4,7 @@ Handles loading, saving, and validating user settings with multi-profile support
 """
 
 import json
+import logging
 import os
 from dataclasses import asdict, dataclass, field
 from email.utils import formataddr, parseaddr
@@ -11,6 +12,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 DEFAULT_CONFIG_PATH = Path(__file__).parent / "settings.json"
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -63,6 +65,7 @@ class ConfigManager:
         self.config_path = config_path or DEFAULT_CONFIG_PATH
         self._active_profile: str = "default"
         self._profiles: dict[str, AppConfig] = {}
+        self._migration_notices: list[str] = []
         self._load_all()
 
     @property
@@ -100,14 +103,14 @@ class ConfigManager:
                 for k, v in data.items()
                 if k not in ("active_profile", "profiles")
             }
-            # Clear credentials for public safety
-            if "aws" in profile_data:
-                profile_data["aws"] = {
-                    "access_key_id": "",
-                    "secret_access_key": "",
-                    "region": profile_data.get("aws", {}).get("region", "us-east-1"),
-                    "source_email": "",
-                }
+            # Warn about migration instead of silently clearing credentials
+            notice = (
+                "Config migrated from legacy flat format to multi-profile format. "
+                "Your existing credentials have been preserved. "
+                "Please ensure settings.json is in your .gitignore."
+            )
+            logger.warning(notice)
+            self._migration_notices.append(notice)
             self._profiles = {"default": self._dict_to_config(profile_data)}
             self._active_profile = "default"
             self.save()
@@ -124,6 +127,11 @@ class ConfigManager:
 
         if self._active_profile not in self._profiles:
             self._active_profile = next(iter(self._profiles))
+
+    @property
+    def migration_notices(self) -> list[str]:
+        """Return any migration notices generated during config loading."""
+        return list(self._migration_notices)
 
     def save(self) -> None:
         """Save all profiles to the config file."""

@@ -43,6 +43,7 @@ async def get_active_config():
         "active_profile": cm.active_profile,
         "config": cm.get_config_dict(),
         "is_configured": cm.is_configured(),
+        "migration_notices": cm.migration_notices,
     }
 
 
