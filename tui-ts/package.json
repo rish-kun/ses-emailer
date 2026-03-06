@@ -1,0 +1,28 @@
+{
+  "name": "tui-ts",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/ink-select-input": "^3.0.5",
+    "@types/ink-spinner": "^3.0.5",
+    "@types/ink-text-input": "^2.0.5"
+  },
+  "peerDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@types/node": "^25.3.5",
+    "@types/react": "^19.2.14",
+    "axios": "^1.13.6",
+    "chalk": "^5.6.2",
+    "form-data": "^4.0.5",
+    "ink": "^6.8.0",
+    "ink-select-input": "^6.2.0",
+    "ink-spinner": "^5.0.0",
+    "ink-text-input": "^6.0.0",
+    "react": "^19.2.4",
+    "zod": "^4.3.6"
+  }
+}

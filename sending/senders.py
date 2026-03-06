@@ -6,19 +6,27 @@ from email.mime.text import MIMEText
 
 import boto3
 from dotenv import load_dotenv
-from emails import Email
+from sending.emails import Email
 
 from config.settings import format_source_email, get_email_address
 
 
 class EmailSender:
-    def __init__(self, reply_to, env_file) -> None:
+    def __init__(self, reply_to, env_file=None, aws_creds=None) -> None:
         self.sender = None
         self.reply_to = reply_to
         self.to = reply_to
         self.env_file = env_file
+        self.aws_creds = aws_creds
 
     def load_config(self, env_file):
+        if self.aws_creds:
+            return (
+                self.aws_creds.get("access_key_id"),
+                self.aws_creds.get("secret_access_key"),
+                self.aws_creds.get("region"),
+                self.aws_creds.get("source_email", "test@example.com"),
+            )
         load_dotenv(env_file)
         return (
             os.getenv("AWS_ACCESS_KEY_ID"),
@@ -28,7 +36,7 @@ class EmailSender:
         )
 
     def setup_client(self, env_file=None):
-        if not env_file:
+        if not env_file and not self.aws_creds:
             env_file = self.env_file
         AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, REGION, SOURCE_EMAIL = (
             self.load_config(env_file)
@@ -77,10 +85,10 @@ class EmailSender:
 
 
 class MassEmailSender(EmailSender):
-    def __init__(self, sender, id, reply_to, delay=60, env_file=None):
+    def __init__(self, sender, id, reply_to, delay=60, env_file=None, aws_creds=None):
+        super().__init__(reply_to=reply_to, env_file=env_file, aws_creds=aws_creds)
         self.sender = sender
         self.id = id
-        self.reply_to = reply_to
         self.to = reply_to
         self.delay = delay
 

@@ -1,0 +1,33 @@
+{
+  "active_profile_id": "dd4e550eb2154da58a63dad77371c4d7",
+  "profiles": [
+    {
+      "id": "dd4e550eb2154da58a63dad77371c4d7",
+      "name": "Default Profile",
+      "config": {
+        "aws": {
+          "access_key_id": "",
+          "secret_access_key": "",
+          "region": "us-east-1",
+          "source_email": ""
+        },
+        "sender": {
+          "sender_name": "SES Email Sender",
+          "reply_to": "",
+          "default_to": ""
+        },
+        "batch": {
+          "batch_size": 50,
+          "delay_seconds": 60.0,
+          "use_bcc": true
+        },
+        "files_directory": "files",
+        "data_directory": "data",
+        "last_excel_path": "",
+        "last_excel_column": 0,
+        "theme": "textual-dark",
+        "test_recipients": []
+      }
+    }
+  ]
+}

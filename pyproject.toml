@@ -11,6 +11,10 @@ dependencies = [
     "textual>=1.0.0",
     "openpyxl>=3.1.0",
     "rich>=14.2.0",
+    "fastapi>=0.129.0",
+    "uvicorn>=0.41.0",
+    "python-multipart>=0.0.22",
+    "pydantic>=2.12.5",
 ]
 
 [project.scripts]

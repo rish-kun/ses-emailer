@@ -16,13 +16,17 @@ A powerful Terminal User Interface (TUI) application for sending bulk emails via
 - ⚙️ **Configuration** - Easy AWS credentials and sender settings management
 - 🎨 **Modern UI** - Sleek interface inspired by Atom One Dark Pro with improved typography and layout
 
+## Architecture Update
+The application has been re-architected into a fast Python FastAPI backend to handle sending, configuration logic, and database operations seamlessly. The Terminal User Interface (TUI) is now built with TypeScript and Ink, allowing better rendering, improved dynamic resizing, and a more robust terminal experience. They securely communicate over a local authenticated connection.
+
 ## Installation
 
 ### Prerequisites
 
 - Python 3.12 or higher
+- `bun` JavaScript runtime (for the TypeScript TUI)
 - AWS SES account with verified sender email
-- `uv` package manager (recommended) or `pip`
+- `uv` package manager
 
 ### Setup
 
@@ -32,24 +36,24 @@ A powerful Terminal User Interface (TUI) application for sending bulk emails via
    cd ses-email
    ```
 
-2. Install dependencies using `uv`:
+2. Install dependencies for the backend using `uv`:
    ```bash
    uv sync
+   uv add fastapi uvicorn pydantic python-multipart
    ```
 
-   Or using `pip`:
+3. Install dependencies for the frontend using `bun`:
    ```bash
-   pip install -e .
+   cd tui-ts
+   bun install
+   cd ..
    ```
 
-3. Run the application:
+4. Run the application:
    ```bash
-   # Using uv
-   uv run ses-email
-
-   # Or directly with Python
-   python -m tui.app
+   python start_app.py
    ```
+   This launcher script will automatically handle spinning up the FastAPI backend and starting the TUI in the foreground, managing secure tokens for their connection.
 
 ## Configuration
 
