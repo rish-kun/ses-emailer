@@ -9,7 +9,7 @@ import * as path from "path";
 import { exec } from "child_process";
 import { Box, Text, useInput } from "ink";
 import { Alert, Spinner, Select, MultiSelect } from "@inkjs/ui";
-import { uploadExcel, createDraft, getConfig } from "../api.js";
+import { uploadExcel, createDraft, getConfig, getTemplates, renderTemplate } from "../api.js";
 import { FormField } from "../components/FormField.js";
 import { SectionBox } from "../components/SectionBox.js";
 import { KeyHint } from "../components/KeyHint.js";
@@ -22,10 +22,10 @@ interface Props {
     initialData: ComposeData | null;
 }
 
-type TabView = "recipients" | "content" | "attachments" | "preview";
+type TabView = "recipients" | "template" | "content" | "attachments" | "preview";
 type OverlayView = "filepicker_excel" | "filepicker_attach";
 
-const TAB_ORDER: TabView[] = ["recipients", "content", "attachments", "preview"];
+const TAB_ORDER: TabView[] = ["recipients", "template", "content", "attachments", "preview"];
 
 export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
     // Navigation
@@ -54,6 +54,11 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
     const [testRecipients, setTestRecipients] = useState<string[]>([]);
     const [loadingTestRecipients, setLoadingTestRecipients] = useState(false);
 
+    // Templates
+    const [templates, setTemplates] = useState<string[]>([]);
+    const [loadingTemplates, setLoadingTemplates] = useState(false);
+    const [renderingTemplate, setRenderingTemplate] = useState<string | null>(null);
+
     // UI
     const [message, setMessage] = useState("");
     const [messageType, setMessageType] = useState<"success" | "error">("success");
@@ -70,6 +75,32 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
             })
             .catch(() => setTestRecipients([]))
             .finally(() => setLoadingTestRecipients(false));
+    }, []);
+
+    // Load templates on mount
+    useEffect(() => {
+        setLoadingTemplates(true);
+        getTemplates()
+            .then((data) => setTemplates(data.templates))
+            .catch(() => setTemplates([]))
+            .finally(() => setLoadingTemplates(false));
+    }, []);
+
+    // Handle template selection
+    const handleSelectTemplate = useCallback(async (templateName: string) => {
+        if (!templateName) return;
+        setRenderingTemplate(templateName);
+        try {
+            const result = await renderTemplate(templateName);
+            setBody(result.html);
+            setEmailType("html");
+            setMessage(`Template "${templateName}" loaded`);
+            setMessageType("success");
+        } catch (err) {
+            setMessage(`Failed to render template: ${err}`);
+            setMessageType("error");
+        }
+        setRenderingTemplate(null);
     }, []);
 
     // Actions
@@ -187,12 +218,13 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
         // Skip if overlay is active
         if (overlay) return;
 
-        // Number keys (Meta+1 to Meta+4) to switch tabs directly
+        // Number keys (Meta+1 to Meta+5) to switch tabs directly
         if (key.meta) {
             if (input === "1") setActiveTab("recipients");
-            if (input === "2") setActiveTab("content");
-            if (input === "3") setActiveTab("attachments");
-            if (input === "4") setActiveTab("preview");
+            if (input === "2") setActiveTab("template");
+            if (input === "3") setActiveTab("content");
+            if (input === "4") setActiveTab("attachments");
+            if (input === "5") setActiveTab("preview");
         }
 
         // Field cycling logic within a tab (Tab key only)
@@ -385,6 +417,58 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
             );
         }
 
+        if (activeTab === "template") {
+            return (
+                <SectionBox title="Email Templates" borderColor="yellow">
+                    <Box flexDirection="column" gap={0} paddingY={1}>
+                        {loadingTemplates ? (
+                            <Box marginTop={1}><Spinner label="Loading templates..." /></Box>
+                        ) : templates.length === 0 ? (
+                            <Box flexDirection="column">
+                                <Text dimColor italic>No templates found.</Text>
+                                <Text dimColor>Add .tsx files to the templates/ directory.</Text>
+                            </Box>
+                        ) : (
+                            <>
+                                <Box marginBottom={1}>
+                                    <Text dimColor>Select a template to populate the email body:</Text>
+                                </Box>
+                                {renderingTemplate ? (
+                                    <Box marginTop={1}><Spinner label={`Rendering ${renderingTemplate}...`} /></Box>
+                                ) : (
+                                    <Box width={30}>
+                                        <Select
+                                            options={[
+                                                { label: "— None —", value: "__none__" },
+                                                ...templates.map((t) => ({ label: t, value: t })),
+                                            ]}
+                                            onChange={(val) => {
+                                                if (val === "__none__") {
+                                                    setBody("");
+                                                    setEmailType("html");
+                                                    setMessage("Body cleared");
+                                                    setMessageType("success");
+                                                } else {
+                                                    handleSelectTemplate(val);
+                                                }
+                                            }}
+                                        />
+                                    </Box>
+                                )}
+                            </>
+                        )}
+
+                        <Box marginTop={2} flexDirection="column">
+                            <Text bold dimColor>── Template Info ──</Text>
+                            <Text dimColor>Templates are React Email components.</Text>
+                            <Text dimColor>Location: templates/ directory</Text>
+                            <Text dimColor>Files: *.tsx</Text>
+                        </Box>
+                    </Box>
+                </SectionBox>
+            );
+        }
+
         if (activeTab === "content") {
             return (
                 <SectionBox title="Email Content" borderColor="blue">
@@ -437,6 +521,21 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
                         {body && (
                             <Box marginTop={1}>
                                 <Text dimColor>{body.length} characters · {emailType.toUpperCase()}</Text>
+                            </Box>
+                        )}
+
+                        {body && (
+                            <Box marginTop={1} width={20}>
+                                <Select
+                                    options={[{ label: "Clear body", value: "clear" }]}
+                                    onChange={(val) => {
+                                        if (val === "clear") {
+                                            setBody("");
+                                            setMessage("Body cleared");
+                                            setMessageType("success");
+                                        }
+                                    }}
+                                />
                             </Box>
                         )}
                     </Box>
@@ -529,6 +628,7 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
                     const isActive = activeTab === tab;
                     let label = "";
                     if (tab === "recipients") label = `Recipients (${recipients.length})`;
+                    if (tab === "template") label = `Template${body ? " ✓" : ""}`;
                     if (tab === "content") label = `Content${subject ? " ✓" : ""} [${emailType.toUpperCase()}]`;
                     if (tab === "attachments") label = `Attachments (${attachments.length})`;
                     if (tab === "preview") label = "Preview";

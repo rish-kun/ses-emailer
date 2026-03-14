@@ -178,3 +178,15 @@ export async function shutdownApi(): Promise<void> {
         // Ignore — server may already be gone or unreachable
     }
 }
+
+// ── Templates ────────────────────────────────────────────────────────
+
+export async function getTemplates() {
+    const { data } = await client.get("/api/templates");
+    return data as { templates: string[] };
+}
+
+export async function renderTemplate(name: string) {
+    const { data } = await client.post("/api/templates/render", { template: name });
+    return data as { html: string };
+}

@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.auth import verify_token
-from api.routers import config, db, drafts, email, history
+from api.routers import config, db, drafts, email, history, templates
 
 app = FastAPI(
     title="SES Email API",
@@ -32,6 +32,7 @@ app.include_router(email.router, prefix="/api", tags=["Email"])
 app.include_router(history.router, prefix="/api/history", tags=["History"])
 app.include_router(drafts.router, prefix="/api/drafts", tags=["Drafts"])
 app.include_router(db.router, prefix="/api/db", tags=["Database"])
+app.include_router(templates.router, prefix="/api", tags=["Templates"])
 
 
 # ── Health check (no auth) ────────────────────────────────────────────
