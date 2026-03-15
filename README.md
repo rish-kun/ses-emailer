@@ -77,6 +77,42 @@ Settings are stored in `config/settings.json` (excluded from git).
 - 📝 **Drafts** — Save and load email drafts
 - ⚙️ **Multi-Profile Config** — Named configuration profiles for different AWS accounts/environments
 - 🔒 **Secure** — Auto-generated Bearer token authentication between TUI and API
+- 📄 **React Email Templates** — Use `.tsx` files for beautiful emails
+
+## React Email Templates
+
+Create email templates using React Email components.
+
+### Adding Templates
+
+1. Create `.tsx` files in `templates/` directory
+2. First time: `cd templates && bun install`
+3. Templates auto-detect — restart app to see new ones
+
+### Template Example
+
+```tsx
+import { Html, Head, Body, Container, Text } from '@react-email/components';
+
+export default function MyTemplate() {
+  return (
+    <Html>
+      <Head />
+      <Body>
+        <Container>
+          <Text>Your content here</Text>
+        </Container>
+      </Body>
+    </Html>
+  );
+}
+```
+
+### Using Templates
+
+- Press `Meta+2` in Compose screen to open Template tab
+- Select from available templates (Welcome, Newsletter included)
+- Preview renders automatically in the app
 
 ## Prerequisites
 
