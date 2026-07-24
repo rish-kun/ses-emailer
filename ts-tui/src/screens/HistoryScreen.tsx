@@ -5,7 +5,13 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Box, Text, useInput } from "ink";
 import { Spinner, Alert } from "@inkjs/ui";
-import { listCampaigns, getStats, getCampaignDetail } from "../api.js";
+import {
+    listCampaigns,
+    getStats,
+    getCampaignDetail,
+    getRetryUrl,
+    getAuthHeaders,
+} from "../api.js";
 import { SectionBox } from "../components/SectionBox.js";
 import { KeyHint } from "../components/KeyHint.js";
 import { FormField } from "../components/FormField.js";
@@ -35,6 +41,8 @@ export function HistoryScreen({ setScreen }: Props) {
     const [detail, setDetail] = useState<Record<string, unknown> | null>(null);
     const [showDetail, setShowDetail] = useState(false);
     const [error, setError] = useState("");
+    const [retrying, setRetrying] = useState(false);
+    const [retryStatus, setRetryStatus] = useState("");
 
     const loadData = useCallback(async (query = "") => {
         setLoading(true);
@@ -66,6 +74,60 @@ export function HistoryScreen({ setScreen }: Props) {
         }
     }, []);
 
+    const retryFailed = useCallback(async (id: string) => {
+        setRetrying(true);
+        setRetryStatus("Starting retry…");
+        try {
+            const response = await fetch(getRetryUrl(id), {
+                method: "POST",
+                headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+            });
+            if (!response.ok || !response.body) {
+                setRetryStatus(`Retry failed: HTTP ${response.status}`);
+                setRetrying(false);
+                return;
+            }
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
+            let eventType = "";
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split("\n");
+                buffer = lines.pop() || "";
+                for (const line of lines) {
+                    if (line.startsWith("event: ")) {
+                        eventType = line.slice(7).trim();
+                    } else if (line.startsWith("data: ")) {
+                        const data = JSON.parse(line.slice(6).trim() || "{}");
+                        if (eventType === "start") {
+                            setRetryStatus(
+                                data.total_recipients > 0
+                                    ? `Retrying ${data.total_recipients} recipient(s)…`
+                                    : "Nothing to retry."
+                            );
+                        } else if (eventType === "complete") {
+                            setRetryStatus(
+                                `Retry done: ${data.total_sent} sent, ${data.total_failed} failed`
+                            );
+                        } else if (eventType === "error") {
+                            setRetryStatus(`Retry error: ${data.error}`);
+                        }
+                        eventType = "";
+                    }
+                }
+            }
+        } catch (err) {
+            setRetryStatus(`Retry error: ${err}`);
+        }
+        setRetrying(false);
+        // Refresh detail + list so retried failures drop off.
+        await loadDetail(id);
+        await loadData(search);
+    }, [loadDetail, loadData, search]);
+
     useInput((input, key) => {
         if (key.escape) {
             if (showDetail) {
@@ -81,11 +143,23 @@ export function HistoryScreen({ setScreen }: Props) {
 
         if (searchActive) return; // TextInput handles keys
 
+        if (showDetail) {
+            if ((input === "y" || input === "r") && detail && !retrying) {
+                const camp = detail["campaign"] as Campaign;
+                const failed =
+                    (detail["failed_records"] as Array<Record<string, unknown>>) || [];
+                const unretried = failed.filter((f) => !f["retried"]).length;
+                if (camp && unretried > 0) retryFailed(camp.id);
+            }
+            return;
+        }
+
         if (!showDetail) {
             if (key.upArrow && selectedIdx > 0) setSelectedIdx((i) => i - 1);
             if (key.downArrow && selectedIdx < campaigns.length - 1)
                 setSelectedIdx((i) => i + 1);
             if (key.return && campaigns[selectedIdx]) {
+                setRetryStatus("");
                 loadDetail(campaigns[selectedIdx].id);
             }
             if (input === "/" && !searchActive) setSearchActive(true);
@@ -107,6 +181,7 @@ export function HistoryScreen({ setScreen }: Props) {
         const body = (detail["body"] as string) || "";
         const failed = (detail["failed_records"] as Array<Record<string, unknown>>) || [];
         const sent = (detail["sent_records"] as Array<Record<string, unknown>>) || [];
+        const unretried = failed.filter((f) => !f["retried"]).length;
 
         return (
             <Box flexDirection="column">
@@ -134,11 +209,16 @@ export function HistoryScreen({ setScreen }: Props) {
                 </SectionBox>
 
                 {failed.length > 0 && (
-                    <SectionBox title={`Failed Recipients (${failed.length})`} borderColor="red">
+                    <SectionBox
+                        title={`Failed Recipients (${failed.length}${unretried > 0 ? `, ${unretried} not retried` : ", all retried"})`}
+                        borderColor="red"
+                    >
                         <Box flexDirection="column" paddingY={0}>
                             {failed.slice(0, 8).map((f, i) => (
                                 <Box key={i}>
-                                    <Text color="red">✗ </Text>
+                                    <Text color={f["retried"] ? "yellow" : "red"}>
+                                        {f["retried"] ? "↻ " : "✗ "}
+                                    </Text>
                                     <Text>{f["recipient"] as string}</Text>
                                     <Text dimColor> — {f["error"] as string}</Text>
                                 </Box>
@@ -150,8 +230,27 @@ export function HistoryScreen({ setScreen }: Props) {
                     </SectionBox>
                 )}
 
+                {(retrying || retryStatus) && (
+                    <Box marginTop={1}>
+                        {retrying ? (
+                            <Spinner label={retryStatus || "Retrying…"} />
+                        ) : (
+                            <Text color="cyan">{retryStatus}</Text>
+                        )}
+                    </Box>
+                )}
+
                 <Box marginTop={1}>
-                    <KeyHint hints={[{ key: "Esc", label: "Back to list" }]} />
+                    <KeyHint
+                        hints={
+                            unretried > 0 && !retrying
+                                ? [
+                                      { key: "Y", label: `Retry ${unretried} failed` },
+                                      { key: "Esc", label: "Back to list" },
+                                  ]
+                                : [{ key: "Esc", label: "Back to list" }]
+                        }
+                    />
                 </Box>
             </Box>
         );

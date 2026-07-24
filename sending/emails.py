@@ -49,27 +49,3 @@ class Email:
                 )
                 self.message.attach(part)
         return True
-
-    def add_sent(self, email, email_id):
-        """
-        Add email to sent list for that specific email_id
-        """
-        pass
-
-    def check_sent(self, email, email_id):
-        """
-        Check if email has been sent for that specific email_id
-        """
-        pass
-
-
-class EmailSent:
-    def __init__(self, email: Email, sent_to: list[str], sent_type="bcc"):
-        self.email = email
-        self.sent_to = sent_to
-        if sent_type not in ["bcc", "cc", "to"]:
-            raise ValueError("sent_type must be 'bcc', 'cc', or 'to'")
-        self.sent_type = sent_type
-
-    def mark_sent(self):
-        pass

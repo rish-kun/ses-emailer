@@ -5,7 +5,6 @@ Provides commands for database management and migrations.
 """
 
 import argparse
-import sys
 
 
 def main():
@@ -183,7 +182,6 @@ def show_stats():
 
 def check_credentials():
     """Check configuration and credentials."""
-    import os
     from pathlib import Path
 
     print("=" * 60)
@@ -223,7 +221,7 @@ def check_credentials():
         from sending.db import Database
 
         db = Database()
-        print(f"  Tables: emails, sent_emails, failed_emails, drafts")
+        print("  Tables: emails, sent_emails, failed_emails, drafts")
         db.close()
     else:
         print("[INFO] Database will be created on first run")

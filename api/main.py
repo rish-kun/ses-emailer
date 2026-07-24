@@ -4,6 +4,7 @@ FastAPI application entry point for SES Email API.
 
 import os
 import signal
+
 import uvicorn
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,10 +18,11 @@ app = FastAPI(
     version="2.0.0",
 )
 
-# CORS — allow the local TUI to connect
+# CORS — the API is bound to localhost and only the local TUI talks to it, so
+# restrict origins to loopback rather than the wildcard "*".
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r"^https?://(127\.0\.0\.1|localhost)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

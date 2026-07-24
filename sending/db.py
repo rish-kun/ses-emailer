@@ -1,5 +1,26 @@
 import datetime
+import os
 import sqlite3
+from pathlib import Path
+
+# Python 3.12 deprecated the implicit datetime->str adapter. Register an explicit
+# one that preserves the prior "YYYY-MM-DD HH:MM:SS.ffffff" storage format.
+sqlite3.register_adapter(datetime.datetime, lambda v: v.isoformat(sep=" "))
+
+# Anchor the default DB at the project root so the path does not depend on the
+# process's current working directory.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _resolve_db_path(file_name: str) -> str:
+    """Resolve the database path, honoring the SES_DB_PATH env override."""
+    override = os.environ.get("SES_DB_PATH")
+    if override:
+        return str(Path(override).expanduser())
+    candidate = Path(file_name)
+    if not candidate.is_absolute():
+        candidate = _PROJECT_ROOT / candidate
+    return str(candidate)
 
 
 class Database:
@@ -8,8 +29,11 @@ class Database:
     cursor: sqlite3.Cursor
 
     def __init__(self, file_name="emails.db") -> None:
-        self.path = "emails.db"
-        self.conn = sqlite3.connect(self.path)
+        self.path = _resolve_db_path(file_name)
+        self.conn = sqlite3.connect(self.path, check_same_thread=False)
+        # WAL improves concurrent read/write behavior under the async server.
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA busy_timeout=5000")
         self.cursor = self.conn.cursor()
         if not self.check_table_exists():
             self.create_tables()
@@ -17,6 +41,20 @@ class Database:
             self.create_drafts_table()
         if not self.check_failed_emails_table_exists():
             self.create_failed_emails_table()
+        self._ensure_indexes()
+
+    def _ensure_indexes(self) -> None:
+        """Create indexes that keep dedup/summary queries fast as data grows."""
+        self.cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sent_email_id ON sent_emails(email_id)"
+        )
+        self.cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sent_to ON sent_emails(sent_to)"
+        )
+        self.cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_failed_email_id ON failed_emails(email_id)"
+        )
+        self.conn.commit()
 
     def check_table_exists(self):
         self.cursor.execute(

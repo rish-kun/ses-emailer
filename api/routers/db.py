@@ -2,7 +2,6 @@
 Database management API router – migrations, stats, health checks.
 """
 
-import os
 from pathlib import Path
 
 from fastapi import APIRouter, Depends
@@ -97,7 +96,9 @@ async def check_credentials():
     checks["source_email_set"] = bool(cm.config.aws.source_email)
 
     # Database
-    checks["database_exists"] = Path("emails.db").exists()
+    from sending.db import _resolve_db_path
+
+    checks["database_exists"] = Path(_resolve_db_path("emails.db")).exists()
 
     # Directories
     for d in ["data", "files", "config"]:

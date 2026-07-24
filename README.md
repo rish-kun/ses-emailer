@@ -38,6 +38,12 @@ Create named profiles for different environments (production, staging, testing).
 
 Settings are stored in `config/settings.json` (excluded from git).
 
+> **Security note:** AWS credentials are stored in plaintext in
+> `config/settings.json`. Keep it out of version control (it is gitignored) and
+> rotate any key pair that may have been exposed. A future release will add
+> AWS-profile/SSO credential sources (see the roadmap in
+> `docs/superpowers/specs/`).
+
 ## Keyboard Shortcuts
 
 | Key | Action |
@@ -72,7 +78,9 @@ Settings are stored in `config/settings.json` (excluded from git).
 
 - 📧 **Compose Emails** — HTML or plain text with rich preview
 - 📋 **Excel Import** — Load recipient lists from `.xlsx` files
-- 📊 **Batch Sending** — Configurable batch size with rate limiting and real-time SSE progress
+- 📊 **Batch Sending** — Configurable batch size with rate limiting and real-time SSE progress (non-blocking: the API stays responsive during a send)
+- ✅ **Validation & Dedup** — Invalid addresses are filtered before sending; opt-in `skip_already_sent` skips recipients already emailed
+- 🔁 **Retry Failed** — Re-send a campaign's failed recipients from the History screen
 - 📜 **History** — Campaign list with search, stats, and detail views
 - 📝 **Drafts** — Save and load email drafts
 - ⚙️ **Multi-Profile Config** — Named configuration profiles for different AWS accounts/environments
@@ -113,6 +121,25 @@ export default function MyTemplate() {
 - Press `Meta+2` in Compose screen to open Template tab
 - Select from available templates (Welcome, Newsletter included)
 - Preview renders automatically in the app
+
+## Development
+
+```bash
+# Install backend + dev dependencies (pytest, ruff)
+uv sync --group dev
+
+# Lint and test the backend
+uv run ruff check .
+uv run pytest
+
+# Typecheck the TUI
+cd ts-tui && bunx tsc --noEmit
+```
+
+CI (`.github/workflows/ci.yml`) runs the backend lint + tests and the TUI
+typecheck on every push and pull request. The install path is `uv sync` (backed
+by `pyproject.toml` + `uv.lock`); `requirements.txt` is provided only as a
+portable fallback for environments without `uv`.
 
 ## Prerequisites
 
@@ -171,7 +198,11 @@ All endpoints (except `/health`) require `Authorization: Bearer <token>`.
 | GET | `/api/history` | List campaigns |
 | GET | `/api/history/{id}` | Campaign detail |
 | GET | `/api/history/stats` | Statistics |
+| POST | `/api/history/{id}/retry` | Retry a campaign's failed emails (SSE stream) |
 | GET/POST/PUT/DELETE | `/api/drafts[/id]` | Draft CRUD |
+| GET | `/api/templates` | List React Email templates |
+| POST | `/api/templates/render` | Render a template to HTML |
+| POST | `/shutdown` | Stop the API (called by the TUI on exit) |
 
 ## License
 

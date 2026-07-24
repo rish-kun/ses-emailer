@@ -58,6 +58,7 @@ export interface SendRequest {
     body: string;
     email_type?: string;
     attachments?: string[];
+    skip_already_sent?: boolean;
 }
 
 /**
@@ -66,6 +67,11 @@ export interface SendRequest {
  */
 export function getSendUrl() {
     return `${apiUrl}/api/emails/send`;
+}
+
+/** Returns the SSE URL for retrying a campaign's failed emails. */
+export function getRetryUrl(campaignId: string) {
+    return `${apiUrl}/api/history/${campaignId}/retry`;
 }
 
 export function getAuthHeaders() {

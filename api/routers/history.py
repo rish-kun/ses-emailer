@@ -3,11 +3,12 @@ History API router – view email campaigns and statistics.
 """
 
 import datetime
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
+from sse_starlette.sse import EventSourceResponse
 
 from api.auth import verify_token
+from api.routers.email import send_event_stream
 from sending.db import Database
 
 router = APIRouter()
@@ -138,3 +139,49 @@ async def get_campaign_detail(campaign_id: str):
         "sent_records": sent,
         "failed_records": failed,
     }
+
+
+@router.post("/{campaign_id}/retry", dependencies=[Depends(verify_token)])
+async def retry_campaign(campaign_id: str):
+    """
+    Re-send the not-yet-retried failed emails for a campaign.
+
+    Returns an SSE progress stream (same event shape as /emails/send). Each
+    recipient that re-sends successfully is marked retried in failed_emails.
+    """
+    db = Database()
+    grouped = db.get_grouped_emails_summary()
+    campaign = next((g for g in grouped if g["id"] == campaign_id), None)
+    if not campaign:
+        db.close()
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    email_ids = campaign["email_ids"]
+    email = db.get_email(campaign_id)  # (id, subject, body, sender, files)
+    subject = email[1] if email else campaign["subject"]
+    body = email[2] if email else campaign["body"]
+    files_field = email[4] if email else ""
+    attachments = [f.strip() for f in (files_field or "").split(",") if f.strip()]
+
+    # Gather unretried failed recipients across every template id in the group.
+    mark_retried: dict[str, int] = {}
+    for eid in email_ids:
+        for row in db.get_unretried_failed_emails(eid):
+            # row: id, email_id, recipient, error_reason, failed_at, retried
+            mark_retried[row[2]] = row[0]
+    db.close()
+
+    recipients = list(mark_retried.keys())
+
+    return EventSourceResponse(
+        send_event_stream(
+            recipients=recipients,
+            subject=subject,
+            body=body,
+            email_type="html",
+            attachments=attachments,
+            skip_already_sent=False,
+            existing_email_id=campaign_id,
+            mark_retried=mark_retried,
+        )
+    )

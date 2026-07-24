@@ -81,7 +81,7 @@ def main():
         sys.exit(1)
 
     print(f"\033[1;32m[SES Emailer]\033[0m API ready at {api_url}")
-    print(f"\033[1;36m[SES Emailer]\033[0m Starting TUI...")
+    print("\033[1;36m[SES Emailer]\033[0m Starting TUI...")
 
     # Start TypeScript TUI
     tui_env = env.copy()

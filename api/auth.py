@@ -4,6 +4,7 @@ Validates Bearer token against the API_TOKEN environment variable.
 """
 
 import os
+import secrets
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -24,7 +25,7 @@ def verify_token(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="API_TOKEN not configured on server",
         )
-    if credentials.credentials != expected_token:
+    if not secrets.compare_digest(credentials.credentials, expected_token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication token",
