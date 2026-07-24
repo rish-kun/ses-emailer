@@ -114,16 +114,21 @@ and a precondition for every later feature.
 
 Each is its own spec → plan → implement cycle; sketched here for ordering.
 
-### 1. Mail-merge personalization
+### 1. Mail-merge personalization — ✅ IMPLEMENTED (branch `feature/mail-merge-personalization`)
 Per-recipient `{{name}}`/`{{column}}` substitution so a BCC blast becomes
 individual personalized emails.
-- Recipients become **rows** (email + named fields) not just addresses. Excel
-  import keeps selected columns; the API accepts
-  `recipients: [{email, fields}]` alongside the legacy `list[str]`.
-- A small template renderer substitutes `{{field}}` tokens in subject + body.
-- When any personalization token is present, send **one email per recipient**
-  (To:, not BCC), reusing the same batching/rate-limit loop. New
-  `sending/personalize.py`; validation for missing fields (report, don't crash).
+- `sending/personalize.py`: `{{token}}` extraction + case-insensitive render +
+  missing-field detection (unit tested).
+- `sending/email_list.py:scrape_excel_rows` + `POST /api/emails/upload-excel-rows`
+  parse Excel/CSV into `{email, fields}` rows keyed by header names.
+- `SendRequest` gains `personalize` + `recipient_fields`; `send_event_stream`
+  sends **one rendered email per recipient** (To:, per-recipient failure
+  granularity) when tokens are present, else falls back to the BCC batch. The
+  `start` SSE event reports `personalized` + `fields`.
+- TUI: `ts-tui/src/personalize.ts` (client mirror), Excel import captures fields,
+  a Preview personalization panel (detected fields, sample render, missing-field
+  warning, on/off toggle), and a Personalized badge on the Send screen.
+- Tests: `tests/test_personalize.py`, rows parsing, and API send/HTTP coverage.
 
 ### 2. Scheduling / background queue
 Schedule campaigns and survive TUI disconnects.

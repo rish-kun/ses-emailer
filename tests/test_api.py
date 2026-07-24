@@ -1,6 +1,9 @@
 """API smoke tests via FastAPI TestClient with SES mocked (see conftest)."""
 
 import json
+from pathlib import Path
+
+import pandas as pd
 
 from sending.db import Database
 from sending.emails import Email
@@ -73,6 +76,59 @@ def test_send_filters_invalid_recipients(client, auth):
     assert events_of(events, "complete")[-1]["total_sent"] == 1
 
 
+def test_personalized_send_renders_per_recipient(client, auth):
+    resp = client.post(
+        "/api/emails/send",
+        headers=auth,
+        json={
+            "recipients": ["a@x.com", "b@y.io"],
+            "subject": "Hi {{name}}",
+            "body": "Hello {{name}}, welcome!",
+            "personalize": True,
+            "recipient_fields": {
+                "a@x.com": {"name": "Alice"},
+                "b@y.io": {"name": "Bob"},
+            },
+        },
+    )
+    events = parse_sse(resp.text)
+    start = events_of(events, "start")[0]
+    assert start["personalized"] is True
+    assert start["fields"] == ["name"]
+    assert events_of(events, "complete")[-1]["total_sent"] == 2
+
+    # One SES call per recipient (To:, not BCC), each rendered with its own name.
+    assert client.fake_ses.send_email.call_count == 2
+    raw_payloads = b" ".join(
+        call.kwargs["Content"]["Raw"]["Data"]
+        for call in client.fake_ses.send_email.call_args_list
+    )
+    assert b"Hello Alice" in raw_payloads
+    assert b"Hello Bob" in raw_payloads
+    destinations = [
+        call.kwargs["Destination"]["ToAddresses"]
+        for call in client.fake_ses.send_email.call_args_list
+    ]
+    assert ["a@x.com"] in destinations and ["b@y.io"] in destinations
+
+
+def test_personalize_ignored_without_tokens(client, auth):
+    """personalize=True but no {{tokens}} → single BCC batch, not per-recipient."""
+    resp = client.post(
+        "/api/emails/send",
+        headers=auth,
+        json={
+            "recipients": ["a@x.com", "b@y.io"],
+            "subject": "Plain subject",
+            "body": "No tokens here",
+            "personalize": True,
+        },
+    )
+    start = events_of(parse_sse(resp.text), "start")[0]
+    assert start["personalized"] is False
+    assert client.fake_ses.send_email.call_count == 1  # single BCC batch
+
+
 def test_send_skips_already_sent_when_requested(client, auth):
     # Seed a prior send of a@x.com.
     db = Database()
@@ -95,6 +151,32 @@ def test_send_skips_already_sent_when_requested(client, auth):
     start = events_of(events, "start")[0]
     assert start["skipped"] == 1
     assert start["total_recipients"] == 1  # only the new address
+
+
+# ── Excel rows upload ─────────────────────────────────────────────────
+
+
+def test_upload_excel_rows_endpoint(client, auth, tmp_path):
+    xlsx = tmp_path / "people.xlsx"
+    pd.DataFrame({"email": ["a@x.com", "b@y.io"], "name": ["Alice", "Bob"]}).to_excel(
+        xlsx, index=False
+    )
+    dest = Path("data") / "people.xlsx"
+    try:
+        with open(xlsx, "rb") as f:
+            resp = client.post(
+                "/api/emails/upload-excel-rows",
+                headers=auth,
+                files={"file": ("people.xlsx", f, "application/octet-stream")},
+                data={"email_column": "0"},
+            )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["count"] == 2
+        assert body["headers"] == ["email", "name"]
+        assert body["rows"][0]["fields"]["name"] == "Alice"
+    finally:
+        dest.unlink(missing_ok=True)
 
 
 # ── Retry ─────────────────────────────────────────────────────────────

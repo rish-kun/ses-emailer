@@ -25,6 +25,8 @@ export interface ComposeData {
     body: string;
     emailType: "html" | "text";
     attachments: string[];
+    personalize?: boolean;
+    recipientFields?: Record<string, Record<string, string>>;
 }
 
 export function App() {

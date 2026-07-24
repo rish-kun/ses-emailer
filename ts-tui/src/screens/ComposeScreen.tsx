@@ -9,7 +9,8 @@ import * as path from "path";
 import { exec } from "child_process";
 import { Box, Text, useInput } from "ink";
 import { Alert, Spinner, Select, MultiSelect } from "@inkjs/ui";
-import { uploadExcel, createDraft, getConfig, getTemplates, renderTemplate } from "../api.js";
+import { uploadExcelRows, createDraft, getConfig, getTemplates, renderTemplate } from "../api.js";
+import { extractFields, hasTokens, render } from "../personalize.js";
 import { FormField } from "../components/FormField.js";
 import { SectionBox } from "../components/SectionBox.js";
 import { KeyHint } from "../components/KeyHint.js";
@@ -41,6 +42,13 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
     const [excelPath, setExcelPath] = useState("");
     const [excelColumn, setExcelColumn] = useState("0");
     const [loadingExcel, setLoadingExcel] = useState(false);
+
+    // Personalization (mail-merge): per-recipient fields imported from Excel,
+    // and a toggle (effective only when {{tokens}} are present in subject/body).
+    const [recipientFields, setRecipientFields] = useState<Record<string, Record<string, string>>>(
+        initialData?.recipientFields || {}
+    );
+    const [personalize, setPersonalize] = useState<boolean>(initialData?.personalize ?? true);
 
     // Content
     const [subject, setSubject] = useState(initialData?.subject || "");
@@ -124,12 +132,21 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
         if (!path.trim()) return;
         setLoadingExcel(true);
         try {
-            const result = await uploadExcel(path.trim(), parseInt(col) || 0);
-            const newEmails = (result.recipients as string[]).filter(
-                (e: string) => !recipients.includes(e)
-            );
+            // Import full rows so each recipient carries named fields for mail-merge.
+            const result = await uploadExcelRows(path.trim(), parseInt(col) || 0);
+            const emails = result.rows.map((r) => r.email);
+            const newEmails = emails.filter((e) => !recipients.includes(e));
             setRecipients((prev) => [...prev, ...newEmails]);
-            setMessage(`Loaded ${result.count} emails (${newEmails.length} new)`);
+            setRecipientFields((prev) => {
+                const merged = { ...prev };
+                for (const row of result.rows) merged[row.email] = row.fields;
+                return merged;
+            });
+            const cols = result.headers.filter((h) => h !== result.email_column);
+            setMessage(
+                `Loaded ${result.count} rows (${newEmails.length} new)` +
+                    (cols.length ? ` · fields: ${cols.join(", ")}` : "")
+            );
             setMessageType("success");
         } catch (err) {
             setMessage(`Excel error: ${err}`);
@@ -194,8 +211,17 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
             setMessageType("error");
             return;
         }
-        goToSend({ recipients, subject, body, emailType, attachments });
-    }, [recipients, subject, body, emailType, attachments, goToSend]);
+        const effectivePersonalize = personalize && hasTokens(subject, body);
+        goToSend({
+            recipients,
+            subject,
+            body,
+            emailType,
+            attachments,
+            personalize: effectivePersonalize,
+            recipientFields: effectivePersonalize ? recipientFields : {},
+        });
+    }, [recipients, subject, body, emailType, attachments, personalize, recipientFields, goToSend]);
 
     // HOOKS MUST BE AT TOP LEVEL
     useInput((input, key) => {
@@ -351,7 +377,7 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
                         </Box>
 
                         <FormField
-                            label="Column Index"
+                            label="Email Column"
                             value={excelColumn}
                             placeholder="0"
                             isActive={activeField === "excel_column"}
@@ -373,7 +399,7 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
                                 onChange={(val) => {
                                     if (val === "browse") setOverlay("filepicker_excel");
                                     if (val === "load") handleLoadExcel(excelPath, excelColumn);
-                                    if (val === "clear") { setRecipients([]); setMessage("Recipients cleared"); }
+                                    if (val === "clear") { setRecipients([]); setRecipientFields({}); setMessage("Recipients cleared"); }
                                 }}
                             />
                         </Box>
@@ -577,6 +603,20 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
         }
 
         if (activeTab === "preview") {
+            const tokens = extractFields(subject, body);
+            const personalized = personalize && tokens.length > 0;
+            const sampleEmail = recipients[0];
+            const sampleFields = (sampleEmail && recipientFields[sampleEmail]) || {};
+            const missingCount = recipients.filter((e) => {
+                const f = recipientFields[e] || {};
+                const present = new Set(
+                    Object.entries(f)
+                        .filter(([, v]) => v != null && String(v).trim() !== "")
+                        .map(([k]) => k.toLowerCase())
+                );
+                return tokens.some((t) => !present.has(t.toLowerCase()));
+            }).length;
+
             return (
                 <SectionBox title="Email Preview" borderColor="magenta">
                     <Box flexDirection="column" paddingY={1}>
@@ -584,6 +624,48 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
                         <Box><Box width={16}><Text dimColor>Subject:</Text></Box><Text bold>{subject || "—"}</Text></Box>
                         <Box><Box width={16}><Text dimColor>Format:</Text></Box><Text>{emailType.toUpperCase()}</Text></Box>
                         <Box><Box width={16}><Text dimColor>Attachments:</Text></Box><Text>{attachments.length > 0 ? attachments.length : "None"}</Text></Box>
+
+                        {tokens.length > 0 && (
+                            <Box marginTop={1} flexDirection="column" borderStyle="single" borderColor={personalized ? "green" : "gray"} paddingX={1}>
+                                <Box>
+                                    <Text bold color={personalized ? "green" : "gray"}>
+                                        {personalized ? "✦ Personalized send" : "○ Personalization off"}
+                                    </Text>
+                                    <Text dimColor> · fields: {tokens.join(", ")}</Text>
+                                </Box>
+                                {personalized && (
+                                    <>
+                                        <Text dimColor>
+                                            One email per recipient (To:).{" "}
+                                            {missingCount > 0
+                                                ? `⚠ ${missingCount} recipient(s) missing a field (rendered blank).`
+                                                : "All recipients have every field."}
+                                        </Text>
+                                        {sampleEmail && (
+                                            <Box flexDirection="column" marginTop={0}>
+                                                <Text dimColor>Sample for {sampleEmail}:</Text>
+                                                <Text>  {render(subject, sampleFields) || "(subject)"}</Text>
+                                                <Text dimColor>  {render(body, sampleFields).slice(0, 120)}</Text>
+                                            </Box>
+                                        )}
+                                        <Box width={26} marginTop={0}>
+                                            <Select
+                                                options={[{ label: "Turn personalization OFF", value: "off" }]}
+                                                onChange={(v) => { if (v === "off") setPersonalize(false); }}
+                                            />
+                                        </Box>
+                                    </>
+                                )}
+                                {!personalized && (
+                                    <Box width={26}>
+                                        <Select
+                                            options={[{ label: "Turn personalization ON", value: "on" }]}
+                                            onChange={(v) => { if (v === "on") setPersonalize(true); }}
+                                        />
+                                    </Box>
+                                )}
+                            </Box>
+                        )}
 
                         <Box marginTop={1} flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1} paddingY={1}>
                             <Text dimColor bold>Body Preview:</Text>

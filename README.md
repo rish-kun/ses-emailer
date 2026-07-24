@@ -80,12 +80,34 @@ Settings are stored in `config/settings.json` (excluded from git).
 - 📋 **Excel Import** — Load recipient lists from `.xlsx` files
 - 📊 **Batch Sending** — Configurable batch size with rate limiting and real-time SSE progress (non-blocking: the API stays responsive during a send)
 - ✅ **Validation & Dedup** — Invalid addresses are filtered before sending; opt-in `skip_already_sent` skips recipients already emailed
+- ✨ **Mail-merge Personalization** — Use `{{name}}` / `{{column}}` tokens in the subject/body; import an Excel with named columns and send one rendered email per recipient
 - 🔁 **Retry Failed** — Re-send a campaign's failed recipients from the History screen
 - 📜 **History** — Campaign list with search, stats, and detail views
 - 📝 **Drafts** — Save and load email drafts
 - ⚙️ **Multi-Profile Config** — Named configuration profiles for different AWS accounts/environments
 - 🔒 **Secure** — Auto-generated Bearer token authentication between TUI and API
 - 📄 **React Email Templates** — Use `.tsx` files for beautiful emails
+
+## Mail-merge Personalization
+
+Send individually-addressed emails instead of one BCC blast.
+
+1. In **Compose → Recipients**, set **Email Column** to the 0-based index of the
+   email column, then import an Excel/CSV. Every other column is captured as a
+   named field per recipient.
+2. In **Content**, use `{{ column }}` tokens in the subject and/or body — e.g.
+   `Hi {{name}}, your seat is {{seat}}`. Token names match the column headers
+   (case-insensitive).
+3. In **Preview**, confirm the *Personalized send* panel (it shows the detected
+   fields, a sample render, and warns if any recipient is missing a field), then
+   send. Each recipient receives their own rendered email (To:, not BCC).
+
+Personalization only activates when the subject/body actually contain `{{tokens}}`;
+otherwise sending falls back to the normal BCC batch. Unknown/blank tokens render
+as an empty string.
+
+Via the API: `POST /api/emails/send` with `personalize: true` and
+`recipient_fields: {"a@x.com": {"name": "Alice"}}`.
 
 ## React Email Templates
 
@@ -192,8 +214,9 @@ All endpoints (except `/health`) require `Authorization: Bearer <token>`.
 | POST | `/api/config/profiles` | Create profile |
 | DELETE | `/api/config/profiles/{name}` | Delete profile |
 | POST | `/api/config/profiles/{name}/activate` | Switch profile |
-| POST | `/api/emails/send` | Send emails (SSE stream) |
-| POST | `/api/emails/upload-excel` | Upload Excel |
+| POST | `/api/emails/send` | Send emails (SSE stream); supports `personalize` + `recipient_fields` |
+| POST | `/api/emails/upload-excel` | Upload Excel → list of addresses |
+| POST | `/api/emails/upload-excel-rows` | Upload Excel → personalization rows (email + named fields) |
 | POST | `/api/emails/compare` | Compare recipients |
 | GET | `/api/history` | List campaigns |
 | GET | `/api/history/{id}` | Campaign detail |

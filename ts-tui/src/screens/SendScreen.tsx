@@ -52,6 +52,8 @@ export function SendScreen({ setScreen, composeData }: Props) {
                     body: composeData.body,
                     email_type: composeData.emailType,
                     attachments: composeData.attachments,
+                    personalize: composeData.personalize ?? false,
+                    recipient_fields: composeData.recipientFields ?? {},
                 }),
             });
 
@@ -108,6 +110,11 @@ export function SendScreen({ setScreen, composeData }: Props) {
                         setTotalRecipients(data.total_recipients);
                         setTotalBatches(data.total_batches);
                         addLog(`Sending to ${data.total_recipients} recipients in ${data.total_batches} batches`);
+                        if (data.personalized) {
+                            addLog(`✦ Personalized send · fields: ${(data.fields || []).join(", ")}`);
+                        }
+                        if (data.invalid > 0) addLog(`⚠ Skipped ${data.invalid} invalid address(es)`);
+                        if (data.skipped > 0) addLog(`⚠ Skipped ${data.skipped} already-sent address(es)`);
                         break;
                     case "batch_start":
                         setCurrentBatch(data.batch);
@@ -182,6 +189,11 @@ export function SendScreen({ setScreen, composeData }: Props) {
                         <Box>
                             <Text dimColor>📎 </Text>
                             <Text>{composeData.attachments.length} files</Text>
+                        </Box>
+                    )}
+                    {composeData.personalize && (
+                        <Box>
+                            <Text color="green" bold>✦ Personalized</Text>
                         </Box>
                     )}
                 </Box>

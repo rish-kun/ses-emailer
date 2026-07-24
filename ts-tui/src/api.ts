@@ -93,6 +93,37 @@ export async function uploadExcel(filePath: string, columnIndex = 0) {
     return data;
 }
 
+export interface ExcelRow {
+    email: string;
+    fields: Record<string, string>;
+}
+
+export interface ExcelRowsResult {
+    headers: string[];
+    email_column: string | null;
+    rows: ExcelRow[];
+    count: number;
+    file?: string;
+}
+
+/** Upload an Excel/CSV and get personalization rows (email + named fields). */
+export async function uploadExcelRows(
+    filePath: string,
+    emailColumn = 0
+): Promise<ExcelRowsResult> {
+    const fs = await import("fs");
+    const FormData = (await import("form-data")).default;
+
+    const form = new FormData();
+    form.append("file", fs.createReadStream(filePath));
+    form.append("email_column", String(emailColumn));
+
+    const { data } = await client.post("/api/emails/upload-excel-rows", form, {
+        headers: { ...form.getHeaders() },
+    });
+    return data as ExcelRowsResult;
+}
+
 export async function compareRecipients(
     recipients: string[],
     emailId?: string,

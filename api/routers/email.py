@@ -18,7 +18,8 @@ from sse_starlette.sse import EventSourceResponse
 from api.auth import verify_token
 from config.settings import format_source_email, get_config, get_email_address
 from sending.db import Database
-from sending.validation import partition_valid
+from sending.personalize import extract_fields, has_tokens, render
+from sending.validation import normalize_email, partition_valid
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,11 @@ class SendRequest(BaseModel):
     attachments: list[str] = []
     # When true, addresses already sent this subject are skipped (dedup).
     skip_already_sent: bool = False
+    # Mail-merge: when true and the subject/body contain {{tokens}}, one rendered
+    # email is sent per recipient (To:, not BCC) using recipient_fields.
+    personalize: bool = False
+    # Map of email address -> {field: value} used for personalization.
+    recipient_fields: dict[str, dict] = {}
 
 
 class CompareRequest(BaseModel):
@@ -77,6 +83,8 @@ async def send_event_stream(
     skip_already_sent: bool = False,
     existing_email_id: Optional[str] = None,
     mark_retried: Optional[dict[str, int]] = None,
+    personalize: bool = False,
+    recipient_fields: Optional[dict[str, dict]] = None,
 ):
     """
     Async generator yielding SSE event dicts for a batch send.
@@ -90,6 +98,9 @@ async def send_event_stream(
             creating a new one on the first successful batch.
         mark_retried: map of recipient -> failed_email row id to mark as retried
             once that recipient is successfully re-sent (retry flow).
+        personalize: when true and the subject/body contain {{tokens}}, send one
+            rendered email per recipient (To:) instead of a BCC blast.
+        recipient_fields: map of email -> {field: value} for personalization.
     """
     config_mgr = get_config()
     config_mgr.apply_env_vars()
@@ -98,6 +109,13 @@ async def send_event_stream(
     batch_size = cfg.batch.batch_size
     delay = cfg.batch.delay_seconds
     use_bcc = cfg.batch.use_bcc
+
+    # Normalize the field map keys so they line up with normalized recipients.
+    fields_by_email = {
+        normalize_email(k): (v or {}) for k, v in (recipient_fields or {}).items()
+    }
+    required_fields = extract_fields(subject, body)
+    personalized = personalize and has_tokens(subject, body)
 
     db = Database()
 
@@ -127,6 +145,8 @@ async def send_event_stream(
         invalid=len(invalid),
         invalid_list=invalid[:50],
         skipped=len(skipped),
+        personalized=personalized,
+        fields=required_fields,
     )
 
     if not recipients:
@@ -176,81 +196,158 @@ async def send_event_stream(
                 batch_size=len(batch),
             )
 
-            try:
-                msg = _create_message(
-                    subject=subject,
-                    body=body,
-                    email_type=email_type,
-                    attachments=attachments,
-                    config=cfg,
+            if personalized:
+                # One rendered email per recipient (To:, not BCC). Failures are
+                # tracked per recipient so one bad address doesn't sink the batch.
+                from_address = format_source_email(
+                    cfg.aws.source_email, cfg.sender.sender_name
                 )
-                source_email = cfg.aws.source_email
-                from_address = format_source_email(source_email, cfg.sender.sender_name)
-                to_address = cfg.sender.default_to or get_email_address(source_email)
-
-                response = await asyncio.to_thread(
-                    _send_batch_sync,
-                    ses_client,
-                    msg.as_bytes(),
-                    from_address,
-                    to_address,
-                    batch,
-                    use_bcc,
-                )
-
-                total_sent += len(batch)
-                email_id = _ensure_email_id()
-
+                batch_sent = 0
+                batch_failed = 0
+                last_error = ""
                 for recipient in batch:
-                    await asyncio.to_thread(db.add_sent, email_id, recipient, "bcc")
-                    if mark_retried and recipient in mark_retried:
+                    fields = fields_by_email.get(recipient, {})
+                    try:
+                        msg = _create_message(
+                            subject=render(subject, fields),
+                            body=render(body, fields),
+                            email_type=email_type,
+                            attachments=attachments,
+                            config=cfg,
+                            to_override=recipient,
+                        )
                         await asyncio.to_thread(
-                            db.mark_failed_email_retried, mark_retried[recipient]
+                            _send_batch_sync,
+                            ses_client,
+                            msg.as_bytes(),
+                            from_address,
+                            recipient,
+                            [recipient],
+                            False,
+                        )
+                        total_sent += 1
+                        batch_sent += 1
+                        email_id = _ensure_email_id()
+                        await asyncio.to_thread(db.add_sent, email_id, recipient, "to")
+                        if mark_retried and recipient in mark_retried:
+                            await asyncio.to_thread(
+                                db.mark_failed_email_retried, mark_retried[recipient]
+                            )
+                    except ClientError as e:
+                        last_error = e.response["Error"]["Message"]
+                        total_failed += 1
+                        batch_failed += 1
+                        email_id = _ensure_email_id()
+                        await asyncio.to_thread(
+                            db.add_failed_email, email_id, recipient, last_error
+                        )
+                    except Exception as e:
+                        last_error = str(e)
+                        total_failed += 1
+                        batch_failed += 1
+                        email_id = _ensure_email_id()
+                        await asyncio.to_thread(
+                            db.add_failed_email, email_id, recipient, last_error
                         )
 
-                yield _sse(
-                    "batch_complete",
-                    batch=batch_num,
-                    sent=len(batch),
-                    total_sent=total_sent,
-                    total_failed=total_failed,
-                    message_id=response.get("MessageId", "")[:16],
-                )
-
-            except ClientError as e:
-                error_msg = e.response["Error"]["Message"]
-                total_failed += len(batch)
-                email_id = _ensure_email_id()
-                for recipient in batch:
-                    await asyncio.to_thread(
-                        db.add_failed_email, email_id, recipient, error_msg
+                if batch_sent:
+                    yield _sse(
+                        "batch_complete",
+                        batch=batch_num,
+                        sent=batch_sent,
+                        failed=batch_failed,
+                        total_sent=total_sent,
+                        total_failed=total_failed,
+                        message_id="",
                     )
-                yield _sse(
-                    "batch_error",
-                    batch=batch_num,
-                    failed=len(batch),
-                    total_sent=total_sent,
-                    total_failed=total_failed,
-                    error=error_msg,
-                )
-
-            except Exception as e:
-                error_msg = str(e)
-                total_failed += len(batch)
-                # Record generic failures too (previously only counted, not logged).
-                email_id = _ensure_email_id()
-                for recipient in batch:
-                    await asyncio.to_thread(
-                        db.add_failed_email, email_id, recipient, error_msg
+                else:
+                    yield _sse(
+                        "batch_error",
+                        batch=batch_num,
+                        failed=batch_failed,
+                        total_sent=total_sent,
+                        total_failed=total_failed,
+                        error=last_error or "send failed",
                     )
-                yield _sse(
-                    "batch_error",
-                    batch=batch_num,
-                    failed=len(batch),
-                    total_sent=total_sent,
-                    total_failed=total_failed,
-                    error=error_msg,
-                )
+
+            else:
+                try:
+                    msg = _create_message(
+                        subject=subject,
+                        body=body,
+                        email_type=email_type,
+                        attachments=attachments,
+                        config=cfg,
+                    )
+                    source_email = cfg.aws.source_email
+                    from_address = format_source_email(
+                        source_email, cfg.sender.sender_name
+                    )
+                    to_address = cfg.sender.default_to or get_email_address(source_email)
+
+                    response = await asyncio.to_thread(
+                        _send_batch_sync,
+                        ses_client,
+                        msg.as_bytes(),
+                        from_address,
+                        to_address,
+                        batch,
+                        use_bcc,
+                    )
+
+                    total_sent += len(batch)
+                    email_id = _ensure_email_id()
+
+                    for recipient in batch:
+                        await asyncio.to_thread(db.add_sent, email_id, recipient, "bcc")
+                        if mark_retried and recipient in mark_retried:
+                            await asyncio.to_thread(
+                                db.mark_failed_email_retried, mark_retried[recipient]
+                            )
+
+                    yield _sse(
+                        "batch_complete",
+                        batch=batch_num,
+                        sent=len(batch),
+                        total_sent=total_sent,
+                        total_failed=total_failed,
+                        message_id=response.get("MessageId", "")[:16],
+                    )
+
+                except ClientError as e:
+                    error_msg = e.response["Error"]["Message"]
+                    total_failed += len(batch)
+                    email_id = _ensure_email_id()
+                    for recipient in batch:
+                        await asyncio.to_thread(
+                            db.add_failed_email, email_id, recipient, error_msg
+                        )
+                    yield _sse(
+                        "batch_error",
+                        batch=batch_num,
+                        failed=len(batch),
+                        total_sent=total_sent,
+                        total_failed=total_failed,
+                        error=error_msg,
+                    )
+
+                except Exception as e:
+                    error_msg = str(e)
+                    total_failed += len(batch)
+                    # Record generic failures too (previously only counted).
+                    email_id = _ensure_email_id()
+                    for recipient in batch:
+                        await asyncio.to_thread(
+                            db.add_failed_email, email_id, recipient, error_msg
+                        )
+                    yield _sse(
+                        "batch_error",
+                        batch=batch_num,
+                        failed=len(batch),
+                        total_sent=total_sent,
+                        total_failed=total_failed,
+                        error=error_msg,
+                    )
 
             # Delay between batches
             if batch_num < total_batches:
@@ -282,6 +379,8 @@ async def send_emails(req: SendRequest):
             email_type=req.email_type,
             attachments=req.attachments,
             skip_already_sent=req.skip_already_sent,
+            personalize=req.personalize,
+            recipient_fields=req.recipient_fields,
         )
     )
 
@@ -313,6 +412,28 @@ async def upload_excel(file: UploadFile = File(...), column_index: int = 0):
             "recipients": emails,
             "count": len(emails),
         }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error parsing Excel: {e}")
+
+
+@router.post("/emails/upload-excel-rows", dependencies=[Depends(verify_token)])
+async def upload_excel_rows(file: UploadFile = File(...), email_column: int = 0):
+    """Upload an Excel/CSV and return personalization rows (email + named fields)."""
+    if not file.filename or not file.filename.endswith((".xlsx", ".xls", ".csv")):
+        raise HTTPException(status_code=400, detail="File must be .xlsx, .xls, or .csv")
+
+    data_dir = Path("data")
+    data_dir.mkdir(exist_ok=True)
+    dest = data_dir / file.filename
+    with open(dest, "wb") as f:
+        f.write(await file.read())
+
+    try:
+        from sending.email_list import scrape_excel_rows
+
+        result = scrape_excel_rows(str(dest), email_column)
+        result["file"] = file.filename
+        return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error parsing Excel: {e}")
 
@@ -363,13 +484,19 @@ def _create_message(
     email_type: str,
     attachments: list[str],
     config,
+    to_override: Optional[str] = None,
 ) -> MIMEMultipart:
-    """Create the email MIME message."""
+    """Create the email MIME message.
+
+    ``to_override`` sets the visible To: header (used by personalized sends so
+    each recipient sees their own address); otherwise the configured default is
+    used.
+    """
     msg = MIMEMultipart()
     msg["Subject"] = subject
     source_email = config.aws.source_email
     msg["From"] = format_source_email(source_email, config.sender.sender_name)
-    msg["To"] = config.sender.default_to or get_email_address(source_email)
+    msg["To"] = to_override or config.sender.default_to or get_email_address(source_email)
     msg["Reply-To"] = config.sender.reply_to or get_email_address(source_email)
 
     body_part = MIMEMultipart("alternative")
