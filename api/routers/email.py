@@ -61,6 +61,16 @@ def _sse(event: str, **data) -> dict:
     return {"event": event, "data": json.dumps(data)}
 
 
+def _safe_filename(filename: Optional[str], fallback: str = "upload") -> str:
+    """Reduce an uploaded filename to a bare basename (strips any path components).
+
+    Prevents path traversal via names like ``../../etc/passwd`` in multipart
+    uploads before the file is written under a data/attachments directory.
+    """
+    name = Path(filename or "").name
+    return name or fallback
+
+
 def _send_batch_sync(ses_client, msg_bytes: bytes, from_address, to_address, batch, use_bcc):
     """Blocking SES send for a single batch. Run via asyncio.to_thread."""
     return ses_client.send_email(
@@ -397,7 +407,7 @@ async def upload_excel(file: UploadFile = File(...), column_index: int = 0):
     # Save to temp location
     data_dir = Path("data")
     data_dir.mkdir(exist_ok=True)
-    dest = data_dir / file.filename
+    dest = data_dir / _safe_filename(file.filename)
     with open(dest, "wb") as f:
         content = await file.read()
         f.write(content)
@@ -424,7 +434,7 @@ async def upload_excel_rows(file: UploadFile = File(...), email_column: int = 0)
 
     data_dir = Path("data")
     data_dir.mkdir(exist_ok=True)
-    dest = data_dir / file.filename
+    dest = data_dir / _safe_filename(file.filename)
     with open(dest, "wb") as f:
         f.write(await file.read())
 
@@ -454,11 +464,12 @@ async def upload_file(file: UploadFile = File(...)):
     """Upload an attachment file."""
     files_dir = Path(get_config().config.files_directory)
     files_dir.mkdir(exist_ok=True)
-    dest = files_dir / (file.filename or "attachment")
+    safe_name = _safe_filename(file.filename, "attachment")
+    dest = files_dir / safe_name
     with open(dest, "wb") as f:
         content = await file.read()
         f.write(content)
-    return {"filename": file.filename, "path": str(dest)}
+    return {"filename": safe_name, "path": str(dest)}
 
 
 @router.get("/files", dependencies=[Depends(verify_token)])

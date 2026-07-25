@@ -179,6 +179,27 @@ def test_upload_excel_rows_endpoint(client, auth, tmp_path):
         dest.unlink(missing_ok=True)
 
 
+def test_upload_rejects_path_traversal_filename(client, auth, tmp_path):
+    """A malicious ../ filename is reduced to a bare basename under data/."""
+    xlsx = tmp_path / "src.xlsx"
+    pd.DataFrame({"email": ["a@x.com"], "name": ["Alice"]}).to_excel(xlsx, index=False)
+    escaped = Path("data") / "pwned.xlsx"
+    try:
+        with open(xlsx, "rb") as f:
+            resp = client.post(
+                "/api/emails/upload-excel-rows",
+                headers=auth,
+                files={"file": ("../../pwned.xlsx", f, "application/octet-stream")},
+                data={"email_column": "0"},
+            )
+        assert resp.status_code == 200
+        # Written as data/pwned.xlsx, never outside the data dir.
+        assert escaped.exists()
+        assert not (Path("data").parent / "pwned.xlsx").exists()
+    finally:
+        escaped.unlink(missing_ok=True)
+
+
 # ── Retry ─────────────────────────────────────────────────────────────
 
 
