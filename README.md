@@ -54,6 +54,8 @@ Settings are stored in `config/settings.json` (excluded from git).
 | `S` | Settings |
 | `H` | History |
 | `D` | Drafts |
+| `J` | Queue / scheduled sends |
+| `Ctrl+J` | Queue or schedule the current email |
 | `Esc` | Back / Cancel |
 | `↑↓` | Navigate lists |
 | `Enter` | Select / Confirm |
@@ -81,6 +83,7 @@ Settings are stored in `config/settings.json` (excluded from git).
 - 📊 **Batch Sending** — Configurable batch size with rate limiting and real-time SSE progress (non-blocking: the API stays responsive during a send)
 - ✅ **Validation & Dedup** — Invalid addresses are filtered before sending; opt-in `skip_already_sent` skips recipients already emailed
 - ✨ **Mail-merge Personalization** — Use `{{name}}` / `{{column}}` tokens in the subject/body; import an Excel with named columns and send one rendered email per recipient
+- ⏱️ **Scheduling & Queue** — Queue or schedule sends to run in a background worker that survives the TUI closing; monitor and cancel from the Queue screen
 - 🔁 **Retry Failed** — Re-send a campaign's failed recipients from the History screen
 - 📜 **History** — Campaign list with search, stats, and detail views
 - 📝 **Drafts** — Save and load email drafts
@@ -108,6 +111,31 @@ as an empty string.
 
 Via the API: `POST /api/emails/send` with `personalize: true` and
 `recipient_fields: {"a@x.com": {"name": "Alice"}}`.
+
+## Scheduling & Background Queue
+
+Enqueue sends so they run in the API's background worker instead of blocking on a
+live connection — a queued or scheduled send **survives the TUI closing**.
+
+1. **Queue now.** In **Compose**, build your email as usual, then press `Ctrl+J`
+   with the **Schedule (ISO)** field (Preview tab) left blank. The send is
+   enqueued and starts as soon as the worker is free. (`Ctrl+E` still does an
+   immediate live send.)
+2. **Schedule for later.** Fill the **Schedule (ISO)** field with an ISO-8601
+   datetime — e.g. `2026-08-01T09:00` — before pressing `Ctrl+J`. The worker
+   claims the job once its scheduled time is due.
+3. **Monitor & cancel.** From **Home**, press `J` to open the **Queue** screen. It
+   lists jobs newest-first with live-refreshing progress; press `C` to cancel a
+   pending, scheduled, or running job (running jobs stop cooperatively).
+
+Queued jobs run through the same send pipeline as live sends, so they reuse
+validation, dedup, and mail-merge personalization. Jobs are persisted in a SQLite
+`jobs` table; if the API restarts mid-send, any interrupted (running) job is
+requeued to pending and picked up again.
+
+Via the API: `POST /api/jobs` (body mirrors the send request plus optional
+`scheduled_at` and `name`), then poll `GET /api/jobs/{id}` or stream
+`GET /api/jobs/{id}/stream`.
 
 ## React Email Templates
 
@@ -222,6 +250,11 @@ All endpoints (except `/health`) require `Authorization: Bearer <token>`.
 | GET | `/api/history/{id}` | Campaign detail |
 | GET | `/api/history/stats` | Statistics |
 | POST | `/api/history/{id}/retry` | Retry a campaign's failed emails (SSE stream) |
+| POST | `/api/jobs` | Enqueue or schedule a send (body mirrors send + optional `scheduled_at`, `name`) |
+| GET | `/api/jobs` | List jobs (newest first) |
+| GET | `/api/jobs/{id}` | Job status + progress |
+| POST | `/api/jobs/{id}/cancel` | Cancel a pending/scheduled/running job |
+| GET | `/api/jobs/{id}/stream` | SSE progress stream (reconnect-safe) |
 | GET/POST/PUT/DELETE | `/api/drafts[/id]` | Draft CRUD |
 | GET | `/api/templates` | List React Email templates |
 | POST | `/api/templates/render` | Render a template to HTML |

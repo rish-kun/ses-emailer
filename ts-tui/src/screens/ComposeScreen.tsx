@@ -9,7 +9,7 @@ import * as path from "path";
 import { exec } from "child_process";
 import { Box, Text, useInput } from "ink";
 import { Alert, Spinner, Select, MultiSelect } from "@inkjs/ui";
-import { uploadExcelRows, createDraft, getConfig, getTemplates, renderTemplate } from "../api.js";
+import { uploadExcelRows, createDraft, getConfig, getTemplates, renderTemplate, enqueueJob } from "../api.js";
 import { extractFields, hasTokens, render } from "../personalize.js";
 import { FormField } from "../components/FormField.js";
 import { SectionBox } from "../components/SectionBox.js";
@@ -54,6 +54,9 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
     const [subject, setSubject] = useState(initialData?.subject || "");
     const [body, setBody] = useState(initialData?.body || "");
     const [emailType, setEmailType] = useState<"html" | "text">(initialData?.emailType || "html");
+
+    // Scheduling (background jobs): empty = queue immediately, otherwise ISO-8601 datetime.
+    const [scheduleAt, setScheduleAt] = useState("");
 
     // Attachments
     const [attachments, setAttachments] = useState<string[]>(initialData?.attachments || []);
@@ -223,6 +226,44 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
         });
     }, [recipients, subject, body, emailType, attachments, personalize, recipientFields, goToSend]);
 
+    const handleQueue = useCallback(async () => {
+        if (recipients.length === 0) {
+            setMessage("Add at least one recipient");
+            setMessageType("error");
+            return;
+        }
+        if (!subject.trim()) {
+            setMessage("Enter a subject line");
+            setMessageType("error");
+            return;
+        }
+        if (!body.trim()) {
+            setMessage("Enter the email body");
+            setMessageType("error");
+            return;
+        }
+        const effectivePersonalize = personalize && hasTokens(subject, body);
+        try {
+            await enqueueJob({
+                recipients,
+                subject,
+                body,
+                email_type: emailType,
+                attachments,
+                personalize: effectivePersonalize,
+                recipient_fields: effectivePersonalize ? recipientFields : {},
+                scheduled_at: scheduleAt.trim() || null,
+                name: subject,
+            });
+            setMessage(scheduleAt.trim() ? `Scheduled for ${scheduleAt.trim()}` : "Queued for sending");
+            setMessageType("success");
+            setScreen("jobs");
+        } catch (err) {
+            setMessage(`Queue failed: ${err}`);
+            setMessageType("error");
+        }
+    }, [recipients, subject, body, emailType, attachments, personalize, recipientFields, scheduleAt, setScreen]);
+
     // HOOKS MUST BE AT TOP LEVEL
     useInput((input, key) => {
         // Overlay escape
@@ -304,6 +345,7 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
         // Global composition shortcuts
         if (key.ctrl && input === "s") handleSaveDraft();
         if (key.ctrl && input === "e") handleSend();
+        if (key.ctrl && input === "j") handleQueue();
     });
 
     // ── Header ──
@@ -690,6 +732,18 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
                                 />
                             </Box>
                         )}
+
+                        <Box marginTop={1} flexDirection="column">
+                            <FormField
+                                label="Schedule (ISO)"
+                                value={scheduleAt}
+                                placeholder="blank = send now, or 2026-08-01T09:00"
+                                isActive={false}
+                                onChange={setScheduleAt}
+                                onSubmit={() => handleQueue()}
+                            />
+                            <Text dimColor>Ctrl+J to queue{scheduleAt.trim() ? " (scheduled)" : ""} · Ctrl+E to send now</Text>
+                        </Box>
                     </Box>
                 </SectionBox>
             );
@@ -734,6 +788,7 @@ export function ComposeScreen({ setScreen, goToSend, initialData }: Props) {
                     <KeyHint hints={[
                         { key: "←→", label: "Switch Tab" },
                         { key: "Ctrl+E", label: "Send" },
+                        { key: "Ctrl+J", label: "Queue/Schedule" },
                         { key: "Ctrl+S", label: "Save Draft" },
                         { key: "Esc", label: "Back" },
                     ]} />

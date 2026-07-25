@@ -10,6 +10,7 @@ import { ComposeScreen } from "./screens/ComposeScreen.js";
 import { SendScreen } from "./screens/SendScreen.js";
 import { HistoryScreen } from "./screens/HistoryScreen.js";
 import { DraftsScreen } from "./screens/DraftsScreen.js";
+import { JobsScreen } from "./screens/JobsScreen.js";
 
 export type Screen =
     | "home"
@@ -17,7 +18,8 @@ export type Screen =
     | "compose"
     | "send"
     | "history"
-    | "drafts";
+    | "drafts"
+    | "jobs";
 
 export interface ComposeData {
     recipients: string[];
@@ -83,6 +85,8 @@ export function App() {
                 return <HistoryScreen setScreen={setScreen} />;
             case "drafts":
                 return <DraftsScreen setScreen={setScreen} loadDraft={loadDraft} />;
+            case "jobs":
+                return <JobsScreen setScreen={setScreen} />;
         }
     };
 

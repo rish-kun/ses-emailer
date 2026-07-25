@@ -372,7 +372,12 @@ async def send_event_stream(
     finally:
         db.close()
 
-    yield _sse("complete", total_sent=total_sent, total_failed=total_failed)
+    yield _sse(
+        "complete",
+        total_sent=total_sent,
+        total_failed=total_failed,
+        email_id=current_email_id,
+    )
 
 
 # ── Email sending (SSE stream) ────────────────────────────────────────

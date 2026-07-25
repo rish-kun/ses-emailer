@@ -130,15 +130,28 @@ individual personalized emails.
   warning, on/off toggle), and a Personalized badge on the Send screen.
 - Tests: `tests/test_personalize.py`, rows parsing, and API send/HTTP coverage.
 
-### 2. Scheduling / background queue
+### 2. Scheduling / background queue — ✅ IMPLEMENTED (branch `feature/scheduling-queue`)
 Schedule campaigns and survive TUI disconnects.
-- Introduce a **job model** (`jobs` table: id, type, payload, status, progress,
-  scheduled_at, timestamps) and an in-process async worker started in
-  `api/main.py` lifespan. `POST /api/emails/send` becomes "enqueue a job";
-  progress is polled (`GET /api/jobs/{id}`) or streamed via SSE from job state,
-  so a dropped TUI no longer loses the send.
-- A scheduler tick runs due jobs. Keeps SQLite (no external broker) to stay
-  lightweight. TUI gains a Jobs/Queue view.
+- **Job model**: a `jobs` table (id, type, status, name, payload, scheduled_at,
+  total/sent/failed counters, timestamps) with statuses `scheduled`, `pending`,
+  `running`, `completed`, `failed`, `canceled`, plus the enqueue/claim/progress/
+  cancel/requeue DB methods in `sending/db.py`.
+- **In-process async worker** (`api/worker.py`) started via the FastAPI lifespan
+  in `api/main.py`. It claims due jobs (pending, or scheduled and past their
+  `scheduled_at`), runs them through the **shared send pipeline** (so it reuses
+  validation, dedup, and mail-merge personalization), and records progress. Since
+  the worker runs independently of any client, a queued/scheduled send survives
+  the TUI disconnecting. On startup it **requeues interrupted (running) jobs** to
+  pending (crash recovery), and running jobs can be **canceled cooperatively**.
+- **Endpoints** (`api/routers/jobs.py`, all bearer-authed): `POST /api/jobs`
+  (enqueue/schedule; body mirrors the send request plus optional `scheduled_at`
+  and `name`), `GET /api/jobs` (list, newest first), `GET /api/jobs/{id}` (status
+  + progress), `POST /api/jobs/{id}/cancel`, and `GET /api/jobs/{id}/stream`
+  (reconnect-safe SSE that polls job state).
+- **TUI**: a new Queue screen (Home `J`) listing jobs with live-refreshing
+  progress and a Cancel action (`C`); Compose gains `Ctrl+J` to queue or schedule
+  the current email (optional "Schedule (ISO)" field), while `Ctrl+E` still does
+  an immediate live send.
 
 ### 3. Bounce & complaint tracking
 Protect sender reputation.

@@ -41,7 +41,15 @@ class Database:
             self.create_drafts_table()
         if not self.check_failed_emails_table_exists():
             self.create_failed_emails_table()
+        if not self._table_exists("jobs"):
+            self.create_jobs_table()
         self._ensure_indexes()
+
+    def _table_exists(self, name: str) -> bool:
+        self.cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (name,)
+        )
+        return bool(self.cursor.fetchone())
 
     def _ensure_indexes(self) -> None:
         """Create indexes that keep dedup/summary queries fast as data grows."""
@@ -53,6 +61,9 @@ class Database:
         )
         self.cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_failed_email_id ON failed_emails(email_id)"
+        )
+        self.cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)"
         )
         self.conn.commit()
 
@@ -136,6 +147,201 @@ class Database:
             """
         )
         self.conn.commit()
+
+    def create_jobs_table(self):
+        """Create the jobs table for scheduled/queued send jobs."""
+        self.cursor.execute(
+            """
+            CREATE TABLE jobs (
+                id TEXT PRIMARY KEY,
+                type TEXT NOT NULL DEFAULT 'send',
+                status TEXT NOT NULL DEFAULT 'pending',
+                name TEXT NOT NULL DEFAULT '',
+                payload TEXT NOT NULL DEFAULT '{}',
+                scheduled_at TIMESTAMP,
+                total INTEGER NOT NULL DEFAULT 0,
+                sent INTEGER NOT NULL DEFAULT 0,
+                failed INTEGER NOT NULL DEFAULT 0,
+                error TEXT NOT NULL DEFAULT '',
+                email_id TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                started_at TIMESTAMP,
+                finished_at TIMESTAMP
+            )
+            """
+        )
+        self.conn.commit()
+
+    # ── Job queue operations ──────────────────────────────────────────
+
+    _JOB_COLUMNS = (
+        "id, type, status, name, payload, scheduled_at, total, sent, failed, "
+        "error, email_id, created_at, updated_at, started_at, finished_at"
+    )
+
+    def _row_to_job(self, row: tuple) -> dict:
+        import json as _json
+
+        (
+            jid, jtype, status, name, payload, scheduled_at, total, sent, failed,
+            error, email_id, created_at, updated_at, started_at, finished_at,
+        ) = row
+        try:
+            payload_obj = _json.loads(payload) if payload else {}
+        except (ValueError, TypeError):
+            payload_obj = {}
+        return {
+            "id": jid,
+            "type": jtype,
+            "status": status,
+            "name": name,
+            "payload": payload_obj,
+            "scheduled_at": str(scheduled_at) if scheduled_at else None,
+            "total": total,
+            "sent": sent,
+            "failed": failed,
+            "error": error,
+            "email_id": email_id,
+            "created_at": str(created_at) if created_at else None,
+            "updated_at": str(updated_at) if updated_at else None,
+            "started_at": str(started_at) if started_at else None,
+            "finished_at": str(finished_at) if finished_at else None,
+        }
+
+    def add_job(
+        self,
+        job_id: str,
+        payload: dict,
+        name: str = "",
+        scheduled_at: "datetime.datetime | None" = None,
+        job_type: str = "send",
+    ) -> str:
+        """Insert a new job. Status is 'scheduled' if scheduled_at is in the future."""
+        import json as _json
+
+        now = datetime.datetime.now()
+        status = "scheduled" if scheduled_at and scheduled_at > now else "pending"
+        self.cursor.execute(
+            """
+            INSERT INTO jobs (id, type, status, name, payload, scheduled_at,
+                              total, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                job_id,
+                job_type,
+                status,
+                name,
+                _json.dumps(payload),
+                scheduled_at,
+                len(payload.get("recipients", [])),
+                now,
+                now,
+            ),
+        )
+        self.conn.commit()
+        return job_id
+
+    def get_job(self, job_id: str) -> dict | None:
+        self.cursor.execute(
+            f"SELECT {self._JOB_COLUMNS} FROM jobs WHERE id = ?", (job_id,)
+        )
+        row = self.cursor.fetchone()
+        return self._row_to_job(row) if row else None
+
+    def list_jobs(self, limit: int = 100) -> list[dict]:
+        self.cursor.execute(
+            f"SELECT {self._JOB_COLUMNS} FROM jobs ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        )
+        return [self._row_to_job(r) for r in self.cursor.fetchall()]
+
+    def claim_next_job(self) -> dict | None:
+        """
+        Atomically claim the next runnable job (pending, or scheduled and due).
+
+        Marks it 'running' and returns it, or None if nothing is ready.
+        """
+        now = datetime.datetime.now()
+        self.cursor.execute(
+            """
+            SELECT id FROM jobs
+            WHERE status = 'pending'
+               OR (status = 'scheduled' AND scheduled_at IS NOT NULL
+                   AND scheduled_at <= ?)
+            ORDER BY COALESCE(scheduled_at, created_at) ASC
+            LIMIT 1
+            """,
+            (now,),
+        )
+        row = self.cursor.fetchone()
+        if not row:
+            return None
+        job_id = row[0]
+        self.cursor.execute(
+            "UPDATE jobs SET status='running', started_at=?, updated_at=? WHERE id=?",
+            (now, now, job_id),
+        )
+        self.conn.commit()
+        return self.get_job(job_id)
+
+    def update_job_progress(
+        self, job_id: str, sent: int, failed: int, total: int | None = None
+    ) -> None:
+        now = datetime.datetime.now()
+        if total is not None:
+            self.cursor.execute(
+                "UPDATE jobs SET sent=?, failed=?, total=?, updated_at=? WHERE id=?",
+                (sent, failed, total, now, job_id),
+            )
+        else:
+            self.cursor.execute(
+                "UPDATE jobs SET sent=?, failed=?, updated_at=? WHERE id=?",
+                (sent, failed, now, job_id),
+            )
+        self.conn.commit()
+
+    def finish_job(
+        self,
+        job_id: str,
+        status: str,
+        error: str = "",
+        email_id: str | None = None,
+    ) -> None:
+        now = datetime.datetime.now()
+        self.cursor.execute(
+            """
+            UPDATE jobs
+            SET status=?, error=?, email_id=COALESCE(?, email_id),
+                finished_at=?, updated_at=?
+            WHERE id=?
+            """,
+            (status, error, email_id, now, now, job_id),
+        )
+        self.conn.commit()
+
+    def cancel_job(self, job_id: str) -> bool:
+        """Cancel a job that has not finished. Returns True if it was cancelable."""
+        now = datetime.datetime.now()
+        self.cursor.execute(
+            """
+            UPDATE jobs SET status='canceled', updated_at=?, finished_at=?
+            WHERE id=? AND status IN ('pending','scheduled','running')
+            """,
+            (now, now, job_id),
+        )
+        self.conn.commit()
+        return self.cursor.rowcount > 0
+
+    def requeue_running_jobs(self) -> int:
+        """Reset jobs stuck in 'running' (e.g. after a crash) back to 'pending'."""
+        self.cursor.execute(
+            "UPDATE jobs SET status='pending', updated_at=? WHERE status='running'",
+            (datetime.datetime.now(),),
+        )
+        self.conn.commit()
+        return self.cursor.rowcount
 
     def close(self):
         self.conn.close()

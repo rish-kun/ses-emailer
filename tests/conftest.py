@@ -52,5 +52,28 @@ def client(db_path, configured, monkeypatch):
 
 
 @pytest.fixture
+def worker_client(db_path, configured, monkeypatch):
+    """Like `client`, but enters the app lifespan so the background worker runs."""
+    from unittest.mock import MagicMock
+
+    monkeypatch.setenv("API_TOKEN", "test-token")
+
+    fake_ses = MagicMock()
+    fake_ses.send_email.return_value = {"MessageId": "0000000000000000-msg"}
+
+    import boto3
+
+    monkeypatch.setattr(boto3, "client", lambda *a, **k: fake_ses)
+
+    from fastapi.testclient import TestClient
+
+    from api.main import app
+
+    with TestClient(app) as test_client:
+        test_client.fake_ses = fake_ses
+        yield test_client
+
+
+@pytest.fixture
 def auth():
     return {"Authorization": "Bearer test-token"}

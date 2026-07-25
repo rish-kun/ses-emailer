@@ -188,6 +188,57 @@ export async function deleteDraft(id: number) {
     return data;
 }
 
+// ── Jobs (scheduling / queue) ───────────────────────────────────────
+
+export interface Job {
+    id: string;
+    type: string;
+    status: string;
+    name: string;
+    total: number;
+    sent: number;
+    failed: number;
+    error: string;
+    email_id: string | null;
+    scheduled_at: string | null;
+    created_at: string | null;
+    started_at: string | null;
+    finished_at: string | null;
+}
+
+export interface EnqueueJobBody {
+    recipients: string[];
+    subject: string;
+    body: string;
+    email_type?: string;
+    attachments?: string[];
+    skip_already_sent?: boolean;
+    personalize?: boolean;
+    recipient_fields?: Record<string, Record<string, string>>;
+    scheduled_at?: string | null;
+    name?: string;
+}
+
+export async function enqueueJob(body: EnqueueJobBody): Promise<Job> {
+    const { data } = await client.post("/api/jobs", body);
+    return data as Job;
+}
+
+export async function listJobs(limit = 100) {
+    const { data } = await client.get("/api/jobs", { params: { limit } });
+    return data as { jobs: Job[]; total: number };
+}
+
+export async function getJob(id: string) {
+    const { data } = await client.get(`/api/jobs/${id}`);
+    return data as Job;
+}
+
+export async function cancelJob(id: string) {
+    const { data } = await client.post(`/api/jobs/${id}/cancel`);
+    return data as Job;
+}
+
 // ── DB / Health ─────────────────────────────────────────────────────
 
 export async function healthCheck() {

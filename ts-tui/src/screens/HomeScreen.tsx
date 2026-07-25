@@ -52,6 +52,7 @@ export function HomeScreen({ setScreen }: Props) {
         if (k === "c") { console.clear(); setScreen("compose"); }
         if (k === "s") { console.clear(); setScreen("config"); }
         if (k === "h") { console.clear(); setScreen("history"); }
+        if (k === "j") { console.clear(); setScreen("jobs"); }
         if (k === "d") { console.clear(); setScreen("drafts"); }
     });
 
@@ -108,6 +109,7 @@ export function HomeScreen({ setScreen }: Props) {
                     <MenuItem hotkey="D" label="Drafts" desc="View saved drafts" color="yellow" />
                     <MenuItem hotkey="S" label="Settings" desc="Configure AWS & profiles" color="green" />
                     <MenuItem hotkey="H" label="History" desc="View sent campaigns" color="magenta" />
+                    <MenuItem hotkey="J" label="Queue" desc="Scheduled & queued sends" color="cyan" />
                 </Box>
             </SectionBox>
 
